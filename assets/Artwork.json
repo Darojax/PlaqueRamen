@@ -1,0 +1,112 @@
+[
+  {
+    "Id": "instant-chicken",
+    "OrderGuid": "4b170164-88ce-43d9-8683-fbc7cf582c22",
+    "AssetName": "Order_Ramen_Instant001",
+    "Dish": "Instant Chicken",
+    "File": "instant-chicken.png",
+    "Sha256": "f8947369a848c2a24f3b1a04742c0d0a0d8b998d799f84d7f2d7ca8825cdcf1f",
+    "Yen": 450,
+    "InkTop": 314,
+    "InkBottom": 2038
+  },
+  {
+    "Id": "instant-egg",
+    "OrderGuid": "6b203da2-f088-43a9-8b6b-da33297b1f05",
+    "AssetName": "Order_Ramen_Instant002",
+    "Dish": "Egg Instant",
+    "File": "instant-egg.png",
+    "Sha256": "f438c829b1fb18dc0f3b665bb73b093f4bfada7f8ba0e30b1ee25768f7bc8f58",
+    "Yen": 550,
+    "InkTop": 366,
+    "InkBottom": 2074
+  },
+  {
+    "Id": "miso-butter-corn",
+    "OrderGuid": "78fcdab4-3b64-4ae7-b00b-8350c1ef6e25",
+    "AssetName": "Order_Ramen_Miso-Butter-Corn",
+    "Dish": "Miso Butter Corn",
+    "File": "miso-butter-corn.png",
+    "Sha256": "5022559f862792547d3f6a6c03c10f92a36853c18f1bfb4924373ee779a2492f",
+    "Yen": 600,
+    "InkTop": 339,
+    "InkBottom": 2037
+  },
+  {
+    "Id": "su-tonkotsu",
+    "OrderGuid": "0ae0d3cc-246b-4da7-880e-262bf34ec16f",
+    "AssetName": "Order_Ramen_Su-Tonkotsu",
+    "Dish": "Su-Tonkotsu",
+    "File": "su-tonkotsu.png",
+    "Sha256": "379a4cece78d0c4b5113a4d17022a27f27225a9746eb49975d99cbdac5ae26cb",
+    "Yen": 600,
+    "InkTop": 366,
+    "InkBottom": 2022
+  },
+  {
+    "Id": "kitakata",
+    "OrderGuid": "a6717140-d313-405e-833b-37fc17f2349b",
+    "AssetName": "Order_Ramen_Kitakata001",
+    "Dish": "Kitakata",
+    "File": "kitakata.png",
+    "Sha256": "9e935fcf2a44fc372d2465c66093e8aed29ea29a94d18ba872b101a11e8bcf11",
+    "Yen": 850,
+    "InkTop": 407,
+    "InkBottom": 2033
+  },
+  {
+    "Id": "hakata",
+    "OrderGuid": "51a1be4c-7bbb-4e19-a9c1-448dcbd4c5ec",
+    "AssetName": "Order_Ramen_Hakata",
+    "Dish": "Hakata",
+    "File": "hakata.png",
+    "Sha256": "9795fe782afbd32021dcb5c4c193868838ecec274e974cb7454c351b74162dbb",
+    "Yen": 1000,
+    "InkTop": 403,
+    "InkBottom": 2048
+  },
+  {
+    "Id": "sapporo",
+    "OrderGuid": "b817304b-588b-403a-8b8a-645598697708",
+    "AssetName": "Order_Ramen_Sapporo",
+    "Dish": "Sapporo",
+    "File": "sapporo.png",
+    "Sha256": "ed512e150b8e0c950386ccfab0f61f5a3585ff45d9ac9261187663f157babbba",
+    "Yen": 1100,
+    "InkTop": 380,
+    "InkBottom": 2056
+  },
+  {
+    "Id": "giro",
+    "OrderGuid": "ef568b37-42f6-4271-8c1d-cf198040c7b8",
+    "AssetName": "Order_Ramen_Giro001",
+    "Dish": "Giro",
+    "File": "giro.png",
+    "Sha256": "2579b3d63e3c2438a2677da389145d3a7a0eb68a6e23781ae6a9f1e43d53fa10",
+    "Yen": 1350,
+    "InkTop": 338,
+    "InkBottom": 2048
+  },
+  {
+    "Id": "iekei",
+    "OrderGuid": "46640139-829c-48a7-808b-86f2282f2f22",
+    "AssetName": "Order_Ramen_Iekei",
+    "Dish": "Iekei",
+    "File": "iekei.png",
+    "Sha256": "ece673740e23c19a0fc291fa6d9e27aff695d002f3ef78b7a9f4dbc6a0e7a2a6",
+    "Yen": 1450,
+    "InkTop": 416,
+    "InkBottom": 2070
+  },
+  {
+    "Id": "toyama-black",
+    "OrderGuid": "36bf8394-aeea-4c03-8f66-df284536dbbe",
+    "AssetName": "Order_Ramen_Toyama_Black",
+    "Dish": "Toyama Black",
+    "File": "toyama-black.png",
+    "Sha256": "a765bd114e4a3bd85cadfe69e9d82cec41a58442ee6e8939e0996a5d96d66c49",
+    "Yen": 1500,
+    "InkTop": 302,
+    "InkBottom": 2036
+  }
+]

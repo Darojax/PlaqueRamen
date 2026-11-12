@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <Version>0.1.7</Version>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="BepInEx" HintPath="$(LoaderCore)\BepInEx.dll" Private="false" />
+    <Reference Include="0Harmony" HintPath="$(LoaderCore)\0Harmony.dll" Private="false" />
+    <Reference Include="Mono.Cecil" HintPath="$(LoaderCore)\Mono.Cecil.dll" Private="false" />
+    <Reference Include="Assembly-CSharp" HintPath="$(GameManaged)\Assembly-CSharp.dll" Private="false" />
+    <Reference Include="Sirenix.Serialization" HintPath="$(GameManaged)\Sirenix.Serialization.dll" Private="false" />
+    <Reference Include="UnityEngine" HintPath="$(GameManaged)\UnityEngine.dll" Private="false" />
+    <Reference Include="UnityEngine.CoreModule" HintPath="$(GameManaged)\UnityEngine.CoreModule.dll" Private="false" />
+    <Reference Include="UnityEngine.ImageConversionModule" HintPath="$(GameManaged)\UnityEngine.ImageConversionModule.dll" Private="false" />
+    <Reference Include="Unity.RenderPipelines.HighDefinition.Runtime" HintPath="$(GameManaged)\Unity.RenderPipelines.HighDefinition.Runtime.dll" Private="false" />
+    <Reference Include="Newtonsoft.Json" HintPath="$(GameManaged)\Newtonsoft.Json.dll" Private="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="HolderManifest.json" LogicalName="PlaqueRamen.HolderManifest.json" />
+    <EmbeddedResource Include="HolderParts.json" LogicalName="PlaqueRamen.HolderParts.json" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,27 @@
+# Publish source, focused fixtures, runtime artwork and build instructions only.
+*
+!/.gitignore
+!/.gitattributes
+!/README.md
+!/Directory.Build.props
+!/src/
+!/src/*.cs
+!/src/*.json
+!/src/PlaqueRamen.csproj
+!/tests/
+!/tests/*.cs
+!/tests/*-fixture.json
+!/tests/PlaqueRamen.Checks.csproj
+!/assets/
+!/assets/Artwork.json
+!/assets/T_Tanzaku001_BASE.original.png
+!/assets/T_Tanzaku001_GLOSS.original.png
+!/assets/art/
+!/assets/art/*.png
+!/assets/paper-beer/
+!/assets/paper-beer/price-70.original.png
+!/assets/paper-beer/price-55.generated.png
+!/scripts/
+!/scripts/Build.ps1
+!/scripts/Setup-Tools.ps1
+!/scripts/Install.ps1
