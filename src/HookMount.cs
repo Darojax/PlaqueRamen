@@ -25,7 +25,7 @@ internal static class HookMount
         var original = points.Select(p => p.Z).ToArray();
         var occupied = holder.Plaques.SelectMany(p => p.TriangleOffsets).ToHashSet();
         var rail = Enumerable.Range(0, indices.Length / 3).Where(t => !occupied.Contains(t)).ToArray();
-        if (rail.Length != 16) throw new InvalidDataException("Could not confirm the original frame surface.");
+        if (rail.Length != holder.FrameTriangles) throw new InvalidDataException("Could not confirm the original frame surface.");
         // The native frame is open-backed against the wall. Its existing rear
         // edge supplies the depth limit even where there is no back-face hit.
         float rearEdge = rail.SelectMany(t => indices.Skip(t * 3).Take(3)).Max(i => points[i].Z);

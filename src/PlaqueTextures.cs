@@ -17,6 +17,7 @@ internal sealed class PlaqueTextures : IDisposable
     private readonly string _folder;
     private readonly Color32[] _base, _gloss;
     private readonly PlaqueSurface _surface;
+    private readonly DarkPlaqueSurface _dark;
     private readonly Dictionary<string, Pair> _cache = new(StringComparer.OrdinalIgnoreCase);
 
     internal PlaqueTextures(string folder)
@@ -39,6 +40,17 @@ internal sealed class PlaqueTextures : IDisposable
                 return face;
             }
             _surface = new PlaqueSurface(Face(_base), Face(_gloss));
+            Pixel[] DarkFace(Color32[] atlas)
+            {
+                var face = new Pixel[DarkPlaqueSurface.Width * DarkPlaqueSurface.Height];
+                for (int y = 0; y < DarkPlaqueSurface.Height; y++) for (int x = 0; x < DarkPlaqueSurface.Width; x++)
+                {
+                    var p = atlas[(DarkPlaqueSurface.Y + y) * Size + DarkPlaqueSurface.X + x];
+                    face[y * DarkPlaqueSurface.Width + x] = new Pixel(p.r, p.g, p.b, p.a);
+                }
+                return face;
+            }
+            _dark = new DarkPlaqueSurface(DarkFace(_base), DarkFace(_gloss));
         }
         finally { UnityEngine.Object.Destroy(albedo); if (gloss) UnityEngine.Object.Destroy(gloss); }
     }
@@ -61,6 +73,15 @@ internal sealed class PlaqueTextures : IDisposable
             for (int i = 0; i < raw.Length; i++) { var p = raw[i]; pixels[i] = new Pixel(p.r, p.g, p.b, p.a); }
             var face = _surface.Compose(pixels, image.width, image.height, art);
             var next = (Color32[])_base.Clone(); var mask = (Color32[])_gloss.Clone();
+            // Both styles occupy separate atlas regions. One cached pair per
+            // recipe serves both holder types, retaining the original cache size.
+            var dark = _dark.Compose(pixels, image.width, image.height, art);
+            for (int y = 0; y < DarkPlaqueSurface.Height; y++) for (int x = 0; x < DarkPlaqueSurface.Width; x++)
+            {
+                int index = (DarkPlaqueSurface.Y + y) * Size + DarkPlaqueSurface.X + x, source = y * DarkPlaqueSurface.Width + x;
+                var c = dark.Albedo[source]; var g = dark.Gloss[source];
+                next[index] = new Color32(c.R, c.G, c.B, c.A); mask[index] = new Color32(g.R, g.G, g.B, g.A);
+            }
             for (int y = 0; y < Height; y++)
                 for (int x = 0; x < Width; x++)
                 {

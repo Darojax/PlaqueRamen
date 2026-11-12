@@ -29,10 +29,10 @@ internal static class AutoLayout
         // change which physical hook receives the first dish.
         var points = holder.Plaques.Select(p => new PlaquePoint(p.Id,
             (p.Min[0] + p.Max[0]) / 2, (p.Min[1] + p.Max[1]) / 2, (p.Min[2] + p.Max[2]) / 2)).ToArray();
-        if (points.Length != 9 || points.Select(p => p.Id).Distinct().Count() != 9)
-            throw new InvalidDataException("The automatic holder needs nine distinct hook positions.");
-        var row = RowSelection.Select(points, points[0].Id, 1, 0);
-        if (row.Length != 9) throw new InvalidDataException("The fixed front-view hook order could not be confirmed.");
+        if (points.Length != holder.Capacity || points.Select(p => p.Id).Distinct().Count() != holder.Capacity)
+            throw new InvalidDataException("The automatic holder needs its complete native fastener layout.");
+        var row = RowSelection.Select(points, points[0].Id, 1, 0, holder.Capacity);
+        if (row.Length != holder.Capacity) throw new InvalidDataException("The fixed front-view fastener order could not be confirmed.");
         return Enumerable.Reverse(row).ToArray();
     }
 }

@@ -21,8 +21,10 @@ internal sealed class HolderBinding : IDisposable
     private int[] _occupied = Array.Empty<int>();
     internal bool Alive => _source && _renderer && _originalMesh && (_source.sharedMesh == _originalMesh || _privateMesh && _source.sharedMesh == _privateMesh);
     internal bool Applied => Alive && _privateMesh && _source.sharedMesh == _privateMesh;
+    internal int Capacity => _holder.Capacity;
     internal object Status => new { name = _source ? _source.name : "removed", applied = Applied, occupiedSlotsRightToLeft = _occupied,
-        visibleHooks = Applied ? 9 : 0, vacantHooks = Applied ? 9 - _occupied.Length : 0 };
+        capacity = Capacity, finish = _holder.Dark ? "Dark" : "Bright",
+        visibleHooks = Applied ? Capacity : 0, vacantHooks = Applied ? Capacity - _occupied.Length : 0 };
 
     internal HolderBinding(MeshFilter source, Renderer renderer, HolderDefinition holder, HolderParts parts)
     {
@@ -43,22 +45,23 @@ internal sealed class HolderBinding : IDisposable
     internal bool Apply(PlannedPlaque[] plan, string signature, PlaqueTextures textures)
     {
         if (!Alive || !IsPlaced(_source)) return false;
+        plan = MenuPlan.ForCapacity(plan, Capacity);
         var materials = _renderer.sharedMaterials;
-        if (Applied && signature == _signature && materials.Length == 10 && materials.All(m => m == _originalMaterials[0])) return false;
+        if (Applied && signature == _signature && materials.Length == Capacity + 1 && materials.All(m => m == _originalMaterials[0])) return false;
         var groups = MenuPlan.Submeshes(_indices, _holder, _parts, _rightToLeft, plan.Length);
         _occupied = MenuPlan.CenteredPlaques(_rightToLeft, plan.Length);
         if (!_privateMesh)
         {
             _privateMesh = UnityEngine.Object.Instantiate(_originalMesh); _privateMesh.name = "PlaqueRamen_PrivateHolder";
-            _privateMesh.subMeshCount = 10;
+            _privateMesh.subMeshCount = Capacity + 1;
             var vertices = _originalMesh.vertices;
             var mounted = HookMount.Connect(_holder, _parts, _indices, vertices.Select(v => new HookPoint(v.x, v.y, v.z)).ToArray());
             for (int i = 0; i < vertices.Length; i++) if (mounted[i] != vertices[i].z) vertices[i].z = mounted[i];
             _privateMesh.vertices = vertices; _privateMesh.RecalculateBounds();
         }
         for (int i = 0; i < groups.Length; i++) _privateMesh.SetTriangles(groups[i], i, false);
-        _source.sharedMesh = _privateMesh; _renderer.sharedMaterials = Enumerable.Repeat(_originalMaterials[0], 10).ToArray();
-        for (int i = 0; i < 9; i++)
+        _source.sharedMesh = _privateMesh; _renderer.sharedMaterials = Enumerable.Repeat(_originalMaterials[0], Capacity + 1).ToArray();
+        for (int i = 0; i < Capacity; i++)
         {
             if (i >= plan.Length) { _renderer.SetPropertyBlock(null, i + 1); continue; }
             var block = new MaterialPropertyBlock(); _renderer.GetPropertyBlock(block, 0);

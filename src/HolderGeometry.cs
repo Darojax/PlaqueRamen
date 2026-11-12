@@ -18,6 +18,13 @@ internal sealed class HolderDefinition
     public string MeshName = "", IndexSha256 = "";
     public int VertexCount = 0, SubmeshCount = 0, MaterialSlot = 0;
     public PlaqueDefinition[] Plaques = Array.Empty<PlaqueDefinition>();
+    internal bool Dark => MeshName == "Mesh_Tanzaku_Shelf001V001";
+    internal int Capacity => Dark ? 7 : 9;
+    internal int BoardTriangles => Dark ? 12 : 20;
+    internal int FastenerTriangles => Dark ? 300 : 86;
+    internal int BoardVertices => Dark ? 24 : 32;
+    internal int FastenerVertices => Dark ? 203 : 62;
+    internal int FrameTriangles => Dark ? 10 : 16;
 }
 
 internal static class HolderGeometry
@@ -39,13 +46,14 @@ internal static class HolderGeometry
     {
         if (vertexCount != holder.VertexCount || submeshCount != holder.SubmeshCount
             || indices.Length % 3 != 0 || Fingerprint(indices) != holder.IndexSha256)
-            throw new InvalidDataException("Holder geometry differs from the reviewed nine-plaque scenery mesh.");
-        if (holder.Plaques.Length != 9 || holder.Plaques.Select(p => p.Id).Distinct().Count() != 9)
-            throw new InvalidDataException("The reviewed holder must contain nine distinct plaques.");
+            throw new InvalidDataException("Holder geometry differs from its reviewed native mesh.");
+        if (holder.MeshName is not ("Mesh_Tanzaku_Shelf001V001" or "Mesh_Tanzaku_Shelf001V002")
+            || holder.Plaques.Length != holder.Capacity || holder.Plaques.Select(p => p.Id).Distinct().Count() != holder.Capacity)
+            throw new InvalidDataException("The holder must match a reviewed seven- or nine-plaque layout.");
         var seen = new HashSet<int>();
         foreach (var plaque in holder.Plaques)
         {
-            if (plaque.Min.Length != 3 || plaque.Max.Length != 3 || plaque.TriangleOffsets.Length != 106)
+            if (plaque.Min.Length != 3 || plaque.Max.Length != 3 || plaque.TriangleOffsets.Length != holder.BoardTriangles + holder.FastenerTriangles)
                 throw new InvalidDataException("A reviewed plaque must contain its board and clip.");
             foreach (int offset in plaque.TriangleOffsets)
                 if (offset < 0 || offset >= indices.Length / 3 || !seen.Add(offset))

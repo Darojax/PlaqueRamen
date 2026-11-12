@@ -51,19 +51,28 @@ internal static class MenuPlan
         return result.ToArray();
     }
 
+    internal static PlannedPlaque[] ForCapacity(PlannedPlaque[] plan, int capacity)
+    {
+        if (capacity is not (7 or 9)) throw new InvalidDataException("Unsupported plaque capacity.");
+        // Price decides inclusion only. The retained dishes keep the agreed
+        // ticket-machine reading order; ties favour the earlier machine button.
+        return plan.OrderByDescending(p => p.Art.Yen).ThenBy(p => p.ButtonId).Take(capacity).OrderBy(p => p.ButtonId).ToArray();
+    }
+
     internal static int[][] Submeshes(int[] source, HolderDefinition holder, HolderParts parts, int[] rightToLeft, int visible)
     {
-        if (rightToLeft.Length != 9 || rightToLeft.Distinct().Count() != 9 || visible < 0 || visible > 9
+        int capacity = holder.Capacity;
+        if (rightToLeft.Length != capacity || rightToLeft.Distinct().Count() != capacity || visible < 0 || visible > capacity
             || rightToLeft.Any(id => !holder.Plaques.Any(p => p.Id == id)))
             throw new InvalidDataException("Invalid right-to-left plaque assignment.");
         parts.Validate(holder, source);
         var wood = new HashSet<int>(parts.Plaques.SelectMany(p => p.BoardTriangleOffsets));
         var selected = CenteredPlaques(rightToLeft, visible);
-        var result = new int[10][];
-        // The rail and all nine native hooks are permanent in material slot 0.
+        var result = new int[capacity + 1][];
+        // The rail and all native hooks/pins are permanent in material slot 0.
         result[0] = Enumerable.Range(0, source.Length / 3).Where(t => !wood.Contains(t))
             .SelectMany(t => source.Skip(t * 3).Take(3)).ToArray();
-        for (int i = 0; i < 9; i++)
+        for (int i = 0; i < capacity; i++)
             result[i + 1] = i >= visible ? Array.Empty<int>() : parts.Plaques.Single(p => p.Id == selected[i]).BoardTriangleOffsets
                 .SelectMany(t => source.Skip(t * 3).Take(3)).ToArray();
         return result;
@@ -71,10 +80,11 @@ internal static class MenuPlan
 
     internal static int[] CenteredPlaques(int[] rightToLeft, int visible)
     {
-        if (rightToLeft.Length != 9 || rightToLeft.Distinct().Count() != 9 || visible < 0 || visible > 9)
+        int capacity = rightToLeft.Length;
+        if (capacity is not (7 or 9) || rightToLeft.Distinct().Count() != capacity || visible < 0 || visible > capacity)
             throw new InvalidDataException("Invalid centered plaque selection.");
         // Floor the start in right-to-left order: even counts retain the middle
         // hook and have their extra board on the viewer's right, with no gaps.
-        return rightToLeft.Skip((9 - visible) / 2).Take(visible).ToArray();
+        return rightToLeft.Skip((capacity - visible) / 2).Take(visible).ToArray();
     }
 }

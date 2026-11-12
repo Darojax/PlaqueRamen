@@ -22,7 +22,7 @@ namespace PlaqueRamen;
 [BepInIncompatibility("com.darojax.ramenshop.menuplaques")]
 public sealed class Plugin : BaseUnityPlugin
 {
-    public const string Id = "com.darojax.ramenshop.plaqueramen", Version = "0.1.7";
+    public const string Id = "com.darojax.ramenshop.plaqueramen", Version = "0.1.8";
     internal static Plugin? Instance;
     private readonly Dictionary<ViewController_Kenbaiki, RuntimeEnvironment_Kenbaiki> _menus = new();
     private readonly Dictionary<MeshFilter, HolderBinding> _holders = new();
@@ -32,6 +32,8 @@ public sealed class Plugin : BaseUnityPlugin
     private Artwork[] _artwork = Array.Empty<Artwork>();
     private HolderDefinition _holder = null!;
     private HolderParts _parts = null!;
+    private HolderDefinition _seven = null!;
+    private HolderParts _sevenParts = null!;
     private Harmony? _harmony;
     private PlaqueTextures? _textures;
     private PaperBeerPriceFix? _paperBeer;
@@ -68,13 +70,14 @@ public sealed class Plugin : BaseUnityPlugin
                 return JsonConvert.DeserializeObject<T>(reader.ReadToEnd()) ?? throw new InvalidDataException("Invalid holder definition: " + name);
             }
             _holder = Read<HolderDefinition>("HolderManifest.json"); _parts = Read<HolderParts>("HolderParts.json");
-            AutoLayout.RightToLeft(_holder);
+            _seven = Read<HolderDefinition>("HolderManifest.Seven.json"); _sevenParts = Read<HolderParts>("HolderParts.Seven.json");
+            AutoLayout.RightToLeft(_holder); AutoLayout.RightToLeft(_seven);
             _harmony = new Harmony(Id); _harmony.PatchAll(GetType().Assembly);
             if (_harmony.GetPatchedMethods().Count() != 5) throw new InvalidOperationException("All five menu and decoration observation hooks are required.");
             _paperBeer = new PaperBeerPriceFix(_folder, text => Logger.LogInfo(text), WriteStatus);
             SceneManager.sceneLoaded += SceneLoaded; SceneManager.sceneUnloaded += SceneUnloaded;
             _ready = true; RequestDiscovery();
-            Logger.LogInfo("PlaqueRamen ready. Nine-plaque holders follow the ticket machine automatically; no shortcut or aiming is required.");
+            Logger.LogInfo("PlaqueRamen ready. Bright nine-plaque and dark seven-plaque holders follow the ticket machine automatically. Limited holders prioritise expensive dishes.");
         }
         catch (Exception ex) { _harmony?.UnpatchSelf(); _message = ex.Message; Logger.LogError("PlaqueRamen inactive: " + ex); }
         WriteStatus();
@@ -139,7 +142,9 @@ public sealed class Plugin : BaseUnityPlugin
         if (!filter || _holders.ContainsKey(filter) || _rejected.Contains(filter.GetInstanceID()) || !filter.gameObject.scene.IsValid()
             || !filter.gameObject.scene.isLoaded || !HolderBinding.IsPlaced(filter)) return;
         var mesh = filter.sharedMesh;
-        if (!mesh || mesh.vertexCount != _holder.VertexCount || mesh.subMeshCount != _holder.SubmeshCount) return;
+        if (!mesh) return;
+        var definition = mesh.vertexCount == _holder.VertexCount ? _holder : mesh.vertexCount == _seven.VertexCount ? _seven : null;
+        if (definition == null || mesh.subMeshCount != definition.SubmeshCount) return;
         var renderer = filter.GetComponent<Renderer>();
         if (!renderer || !renderer.enabled || renderer.forceRenderingOff) return;
         var mats = renderer.sharedMaterials;
@@ -148,7 +153,7 @@ public sealed class Plugin : BaseUnityPlugin
             || mats[0].GetTexture(mainTex).name != "T_Tanzaku001_BASE") return;
         try
         {
-            _holders.Add(filter, new HolderBinding(filter, renderer, _holder, _parts));
+            _holders.Add(filter, new HolderBinding(filter, renderer, definition, definition.Dark ? _sevenParts : _parts));
             _dirty = true; Logger.LogInfo("Automatically found Menu Board Shelf: " + filter.name);
         }
         catch (Exception ex) { _rejected.Add(filter.GetInstanceID()); Logger.LogWarning("Unchanged holder skipped: " + ex.Message); }
@@ -168,9 +173,10 @@ public sealed class Plugin : BaseUnityPlugin
         var entries = menu.SelectedRecipeIndexDict.Select(p => new MenuEntry(p.Key, p.Value ? p.Value.GUID.ToString() : "", p.Value ? p.Value.price : 0, p.Value is RamenOrderData)).ToArray();
         string signature = string.Join("|", entries.OrderBy(e => e.ButtonId).Select(e => e.ButtonId + ":" + e.Guid + ":" + e.Yen + ":" + e.Ramen));
         if (_plan == null || signature != _signature) { _plan = MenuPlan.Build(entries, _artwork); _signature = signature; }
-        if (_holders.Count == 0) { SetMessage("Waiting for a nine-plaque Menu Board Shelf."); return; }
+        if (_holders.Count == 0) { SetMessage("Waiting for a seven- or nine-plaque Menu Board Shelf."); return; }
         _textures ??= new PlaqueTextures(_folder);
-        var missing = _plan.FirstOrDefault(p => !_textures.Has(p.Art));
+        var needed = _holders.Values.SelectMany(h => MenuPlan.ForCapacity(_plan, h.Capacity)).GroupBy(p => p.Art.Id).Select(g => g.First());
+        var missing = needed.FirstOrDefault(p => !_textures.Has(p.Art));
         if (missing != null)
         {
             var timer = System.Diagnostics.Stopwatch.StartNew(); _textures.Prepare(missing.Art); timer.Stop();
@@ -180,7 +186,7 @@ public sealed class Plugin : BaseUnityPlugin
         int changed = 0;
         foreach (var holder in _holders.Values) if (holder.Apply(_plan, signature, _textures)) changed++;
         if (changed > 0) _updates++;
-        SetMessage("Automatically displaying " + _plan.Length + " ramen dishes on " + _holders.Values.Count(h => h.Applied) + " holder(s); all nine hooks remain fixed.", changed > 0);
+        SetMessage("Automatically syncing " + _holders.Values.Count(h => h.Applied) + " holder(s) from " + _plan.Length + " menu dishes; each holder keeps its native fixed fasteners.", changed > 0);
     }
 
     private void SetMessage(string message, bool refresh = false)
@@ -207,7 +213,7 @@ public sealed class Plugin : BaseUnityPlugin
             string text = JsonConvert.SerializeObject(new { version = Version, utc = DateTime.UtcNow.ToString("O"), ready = _ready,
                 automatic = true, observedMachines = _menus.Count, trackedHolders = _holders.Count, appliedHolders = _holders.Values.Count(h => h.Applied),
                 message = _message, syncUpdates = _updates, importedTextures = _imports, lastImportMs = _lastImportMs, sceneScans = _sceneScans,
-                hooksPerHolder = 9, displayed, holders = _holders.Values.Select(h => h.Status).ToArray(),
+                displayed, holders = _holders.Values.Select(h => h.Status).ToArray(),
                 paperBeer = new { appliedSlots = _paperBeer?.Applied ?? 0, readbacks = _paperBeer?.Readbacks ?? 0,
                     sourceMatchError = _paperBeer?.MatchError ?? 0, message = _paperBeer?.Message } }, Formatting.Indented);
             File.WriteAllText(Path.Combine(Paths.ConfigPath, Id + ".status.json"), text);

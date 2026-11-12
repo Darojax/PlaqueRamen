@@ -239,7 +239,9 @@ foreach (var pair in new[] { ("OriginalSha", "price-70.original.png"), ("Replace
     Check(Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path.Combine(root, "assets/paper-beer", pair.Item2)))) == (string)paperType.Fields.Single(f => f.Name == pair.Item1).Constant,
         "paper price artwork matches the runtime hash: " + pair.Item2);
 AutomaticChecks.Run(holder, Check, Refuses);
+SevenPlaqueChecks.Run(root, arts, Check, Refuses);
 
 PaperPriceChecks.Run(Check, Refuses);
+if (args.Contains("--render-dark")) DarkPreview.Run(root, arts, Check);
 
 Console.WriteLine($"{count} PlaqueRamen checks passed.");

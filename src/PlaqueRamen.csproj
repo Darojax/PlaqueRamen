@@ -3,7 +3,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
-    <Version>0.1.7</Version>
+    <Version>0.1.8</Version>
     <Deterministic>true</Deterministic>
   </PropertyGroup>
   <ItemGroup>
@@ -21,5 +21,7 @@
   <ItemGroup>
     <EmbeddedResource Include="HolderManifest.json" LogicalName="PlaqueRamen.HolderManifest.json" />
     <EmbeddedResource Include="HolderParts.json" LogicalName="PlaqueRamen.HolderParts.json" />
+    <EmbeddedResource Include="HolderManifest.Seven.json" LogicalName="PlaqueRamen.HolderManifest.Seven.json" />
+    <EmbeddedResource Include="HolderParts.Seven.json" LogicalName="PlaqueRamen.HolderParts.Seven.json" />
   </ItemGroup>
 </Project>

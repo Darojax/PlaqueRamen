@@ -2,7 +2,7 @@
 
 Menu plaques that follow your ticket machine automatically in **Ramen Shop Simulator (Windows/Steam)**.
 
-The nine-plaque Menu Board Shelf displays your selected ramen dishes with individual wood grain and their correct prices. The Horizon draft beer paper sign is also corrected to **550 yen**.
+The bright nine-plaque and dark seven-plaque Menu Board Shelves display your selected ramen dishes with individual wood grain and their correct prices. The Horizon draft beer paper sign is also corrected to **550 yen**.
 
 ## Installation
 
@@ -15,7 +15,9 @@ If you used the earlier private plaque prototype, remove its `BepInEx/plugins/Me
 
 ## Using the mod
 
-Set your menu at the ticket machine as usual. Every nine-plaque Menu Board Shelf updates automatically, including boards placed during play. No aiming, key combination or configuration is needed. Standalone wooden plaques keep their original appearance.
+Set your menu at the ticket machine as usual. Every supported seven- or nine-plaque Menu Board Shelf updates automatically, including boards placed during play. No aiming, key combination or configuration is needed. Standalone wooden plaques keep their original appearance.
+
+Each dish has bright and dark counterparts using the same approved name and price. Bright plaques use black names and red prices; dark plaques use the original off-white paint and dark stain. Each dish keeps its own grain pattern in both finishes.
 
 Machine buttons are read across each row from the top left:
 
@@ -25,7 +27,9 @@ Machine buttons are read across each row from the top left:
 7 8 9
 ```
 
-Selected ramen dishes appear **right to left** on the board. Drinks and empty buttons are skipped; repeated dishes appear once. Plaques stay together around the middle, with even counts leaning slightly to the right. All nine hooks stay fixed and visible.
+Selected ramen dishes appear **right to left** on the board. Drinks and empty buttons are skipped; repeated dishes appear once. If more dishes are selected than the holder can display, it includes the **most expensive dishes**. Equal prices favour the earlier ticket-machine button. The included dishes retain their ticket-machine reading order.
+
+Plaques stay together around the middle, with even counts leaning slightly to the right. All native hooks or pins stay fixed and visible, with their rear mounts reaching the frame.
 
 The ten supported dishes are Instant Chicken, Egg Instant, Miso Butter Corn, Su-Tonkotsu, Kitakata, Hakata, Sapporo, Giro, Iekei and Toyama Black. If a game update changes a dish's price or the required game data, the affected signs are left original rather than displaying incorrect information. Compatibility is checked by functionality, without a fixed game-version restriction.
 
@@ -43,4 +47,4 @@ cd PlaqueRamen
 .\scripts\Build.ps1 -GameRoot 'D:\SteamLibrary\steamapps\common\Ramen Shop Simulator'
 ```
 
-Replace `-GameRoot` with your game folder. The script downloads and hash-verifies the pinned BepInEx build dependencies, builds the DLL, runs the checks and creates **`dist/PlaqueRamen-0.1.7.zip`**. Game libraries are referenced from your installation and are not included in the ZIP. Install the ZIP using the steps above.
+Replace `-GameRoot` with your game folder. The script downloads and hash-verifies the pinned BepInEx build dependencies, builds the DLL, runs the checks and creates **`dist/PlaqueRamen-0.1.8.zip`**. Game libraries are referenced from your installation and are not included in the ZIP. Install the ZIP using the steps above.
