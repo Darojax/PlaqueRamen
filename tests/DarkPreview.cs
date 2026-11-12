@@ -8,7 +8,7 @@ internal static class DarkPreview
 {
     internal static void Run(string root, Artwork[] arts, Action<bool, string> check)
     {
-        string input = Path.Combine(root, "artifacts/dark-preview-inputs"), output = Path.Combine(root, "artifacts/dark-preview-0.1.8");
+        string input = Path.Combine(root, "artifacts/dark-preview-inputs"), output = Path.Combine(root, "artifacts/dark-preview-0.1.9");
         Directory.CreateDirectory(output);
         var original = Read(Path.Combine(input, "original.ppm")); var gloss = Read(Path.Combine(input, "gloss.ppm"));
         Pixel[] Crop(Pixel[] data) => Enumerable.Range(0, DarkPlaqueSurface.Height).SelectMany(y => Enumerable.Range(0, DarkPlaqueSurface.Width)
@@ -30,6 +30,19 @@ internal static class DarkPreview
             int lo = ink.Min(i => i / 256), hi = ink.Max(i => i / 256);
             check(lo >= 819 * .07 && hi <= 819 * .91 && hi - lo >= 819 * .75, "dark lettering uses the safe area without approaching the pin or bottom edge: " + art.Id);
             check(ink.All(i => Math.Abs(view[i].R - view[i].G) < 12 && Math.Abs(view[i].G - view[i].B) < 12), "dark name and price both use native off-white paint: " + art.Id);
+            var name = ink.Where(i => i % 256 > 256 * .46).ToArray();
+            var price = ink.Where(i => i % 256 < 256 * .46).ToArray();
+            check(name.Length > 200 && price.Length > 200 && name.Length + price.Length == ink.Length,
+                "actual dark render retains both readable columns: " + art.Id);
+            check(name.Min(i => i % 256) >= 256 * .46 && name.Max(i => i % 256) <= 256 * .91
+                && name.Min(i => i / 256) >= 819 * .39 && name.Max(i => i / 256) <= 819 * .91,
+                "actual dish name occupies the upper-right native area: " + art.Id);
+            check(price.Min(i => i % 256) >= 256 * .09 && price.Max(i => i % 256) <= 256 * .46
+                && price.Min(i => i / 256) >= 819 * .10 && price.Max(i => i / 256) <= 819 * .53,
+                "actual price occupies the lower-left native area: " + art.Id);
+            check(name.Average(i => i % 256) > price.Average(i => i % 256) + 256 * .3
+                && name.Average(i => i / 256) > price.Average(i => i / 256) + 819 * .25,
+                "dark lettering has the native stagger rather than a central stack: " + art.Id);
             check(ink.Average(i => viewGloss[i].R) > 100, "dark brush paint follows native gloss: " + art.Id);
             for (int i = 0; i < old.Length; i++) if (!DarkPlaqueSurface.Inside(i % DarkPlaqueSurface.Width, i / DarkPlaqueSurface.Width))
                 if (!Equal(old[i], composed.Albedo[i]) || !Equal(oldGloss[i], composed.Gloss[i])) throw new Exception("Dark edge material changed.");
@@ -38,11 +51,14 @@ internal static class DarkPreview
             string hash = Convert.ToHexString(SHA256.HashData(grain.SelectMany(p => new[] { p.R, p.G, p.B }).ToArray()));
             hashes.Add(hash);
             check(WoodStatistics.Measure(grain).Deviation.All(d => d > .5), "individual upper grain patch is not a flat fill: " + art.Id);
-            records.Add(new { art.Id, art.Dish, art.Yen, WoodMean = stats.Mean, WoodDeviation = stats.Deviation, InkBottom = lo / 819d, InkTop = hi / 819d, GrainHash = hash });
+            object Area(int[] pixels) => new { Left = pixels.Min(i => i % 256) / 256d, Right = pixels.Max(i => i % 256) / 256d,
+                Bottom = pixels.Min(i => i / 256) / 819d, Top = pixels.Max(i => i / 256) / 819d, PaintPixels = pixels.Length };
+            records.Add(new { art.Id, art.Dish, art.Yen, WoodMean = stats.Mean, WoodDeviation = stats.Deviation, InkBottom = lo / 819d, InkTop = hi / 819d,
+                Name = Area(name), Price = Area(price), GrainHash = hash });
         }
         check(hashes.Count == 10, "all ten dark dishes retain distinct grain patterns");
         File.WriteAllText(Path.Combine(output, "verification.json"), JsonSerializer.Serialize(new { NativeWoodMean = surface.NativeWood.Mean,
-            NativeWoodDeviation = surface.NativeWood.Deviation, WhitePaint = new[] { surface.Paint.R, surface.Paint.G, surface.Paint.B },
+            NativeWoodDeviation = surface.NativeWood.Deviation, WhitePaint = new int[] { surface.Paint.R, surface.Paint.G, surface.Paint.B },
             DistinctGrains = hashes.Count, SameCompositorAsGame = true, InGameLighting = false, Plaques = records }, new JsonSerializerOptions { WriteIndented = true }));
     }
 

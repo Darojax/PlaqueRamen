@@ -17,7 +17,7 @@ If you used the earlier private plaque prototype, remove its `BepInEx/plugins/Me
 
 Set your menu at the ticket machine as usual. Every supported seven- or nine-plaque Menu Board Shelf updates automatically, including boards placed during play. No aiming, key combination or configuration is needed. Standalone wooden plaques keep their original appearance.
 
-Each dish has bright and dark counterparts using the same approved name and price. Bright plaques use black names and red prices; dark plaques use the original off-white paint and dark stain. Each dish keeps its own grain pattern in both finishes.
+Each dish has bright and dark counterparts using the same approved name and price. Bright plaques use black names and red prices. Dark plaques use the original off-white paint and dark stain, with the dish name at the upper right and the price at the lower left. Each dish keeps its own grain pattern in both finishes.
 
 Machine buttons are read across each row from the top left:
 
@@ -47,4 +47,4 @@ cd PlaqueRamen
 .\scripts\Build.ps1 -GameRoot 'D:\SteamLibrary\steamapps\common\Ramen Shop Simulator'
 ```
 
-Replace `-GameRoot` with your game folder. The script downloads and hash-verifies the pinned BepInEx build dependencies, builds the DLL, runs the checks and creates **`dist/PlaqueRamen-0.1.8.zip`**. Game libraries are referenced from your installation and are not included in the ZIP. Install the ZIP using the steps above.
+Replace `-GameRoot` with your game folder. The script downloads and hash-verifies the pinned BepInEx build dependencies, builds the DLL, runs the checks and creates **`dist/PlaqueRamen-0.1.9.zip`**. Game libraries are referenced from your installation and are not included in the ZIP. Install the ZIP using the steps above.

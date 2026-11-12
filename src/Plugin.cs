@@ -22,7 +22,7 @@ namespace PlaqueRamen;
 [BepInIncompatibility("com.darojax.ramenshop.menuplaques")]
 public sealed class Plugin : BaseUnityPlugin
 {
-    public const string Id = "com.darojax.ramenshop.plaqueramen", Version = "0.1.8";
+    public const string Id = "com.darojax.ramenshop.plaqueramen", Version = "0.1.9";
     internal static Plugin? Instance;
     private readonly Dictionary<ViewController_Kenbaiki, RuntimeEnvironment_Kenbaiki> _menus = new();
     private readonly Dictionary<MeshFilter, HolderBinding> _holders = new();
