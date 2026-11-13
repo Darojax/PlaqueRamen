@@ -19,6 +19,16 @@ internal static class AutomaticChecks
         schedule.Request(6000);
         check(schedule.Due(6000.25), "returning to a shop schedules fresh discovery");
         var automatic = AutoLayout.RightToLeft(holder);
+        var targets=new TargetDiscovery<string>();targets.Request("new board",0);
+        check(targets.Due(0).SequenceEqual(new[]{"new board"})&&targets.Due(.1).Length==0,"new placement is checked immediately, without a scene sweep or per-frame repeated work");
+        check(targets.Due(.25).SequenceEqual(new[]{"new board"})&&targets.Due(1).Length==1&&targets.Due(4).Length==1&&targets.Due(12).Length==1&&targets.Count==0,
+            "targeted retries retain delayed prefab coverage and stop after the final load window");
+        targets.Request("paper sign",20);targets.Request("second board",20);
+        check(targets.Due(20).Order().SequenceEqual(new[]{"paper sign","second board"}),"multiple late placements are tracked independently");
+        targets.RemoveWhere(t=>t=="paper sign");
+        check(targets.Due(20.25).SequenceEqual(new[]{"second board"}),"unloaded or destroyed decorations can be retired without losing other targets");
+        targets.Request("second board",21);
+        check(targets.Due(21).Length==1&&targets.Due(21).Length==0,"repeated requests for one decoration coalesce rather than multiplying work");
         check(automatic.SequenceEqual(Enumerable.Range(1, 9).Reverse()), "automatic order matches the accepted native front-view hook order");
         var json = new JsonSerializerOptions { IncludeFields = true };
         var reordered = JsonSerializer.Deserialize<HolderDefinition>(JsonSerializer.Serialize(holder, json), json)!;

@@ -9,6 +9,7 @@ using Newtonsoft.Json;
 using RSServiceLocator.Scripts;
 using Runtime_Classes.Environments;
 using Runtime_Classes.Pickups;
+using SaveSystem;
 using UI.Data_Scripts;
 using UI.ViewController_Infos.Scripts;
 using UnityEngine;
@@ -20,13 +21,15 @@ namespace PlaqueRamen;
 [BepInPlugin(Id, "PlaqueRamen", Version)]
 [BepInProcess("Ramen Shop Simulator.exe")]
 [BepInIncompatibility("com.darojax.ramenshop.menuplaques")]
+[BepInDependency(StartupBadge.RelaxedId, BepInDependency.DependencyFlags.SoftDependency)]
+[BepInDependency(StartupBadge.RadioId, BepInDependency.DependencyFlags.SoftDependency)]
 public sealed class Plugin : BaseUnityPlugin
 {
-    public const string Id = "com.darojax.ramenshop.plaqueramen", Version = "0.1.9";
+    public const string Id = "com.darojax.ramenshop.plaqueramen", Version = "0.3.7";
     internal static Plugin? Instance;
     private readonly Dictionary<ViewController_Kenbaiki, RuntimeEnvironment_Kenbaiki> _menus = new();
     private readonly Dictionary<MeshFilter, HolderBinding> _holders = new();
-    private readonly HashSet<Decoration> _pending = new();
+    private readonly TargetDiscovery<Decoration> _pending = new();
     private readonly DiscoverySchedule _discovery = new();
     private readonly HashSet<int> _rejected = new();
     private Artwork[] _artwork = Array.Empty<Artwork>();
@@ -37,11 +40,16 @@ public sealed class Plugin : BaseUnityPlugin
     private Harmony? _harmony;
     private PlaqueTextures? _textures;
     private PaperBeerPriceFix? _paperBeer;
+    private LiveBoardCatalog? _catalog;
+    private CertificateCatalog? _certificates;
+    private StartupBadge? _startupBadge;
+    private string _certificateError = "";
+    private string _catalogError = "";
     private PlannedPlaque[]? _plan;
     private string _folder = "", _signature = "", _message = "Waiting for the shop menu.";
     private bool _ready, _dirty = true;
     private float _nextMenuCheck;
-    private int _imports, _updates, _sceneScans;
+    private int _imports, _updates, _sceneScans, _targetChecks;
     private double _lastImportMs;
 
     private void Awake()
@@ -53,15 +61,19 @@ public sealed class Plugin : BaseUnityPlugin
             Compatibility.Inspect(Path.Combine(Paths.ManagedPath, "Assembly-CSharp.dll"));
             _artwork = JsonConvert.DeserializeObject<Artwork[]>(File.ReadAllText(Path.Combine(_folder, "Artwork.json")))
                 ?? throw new InvalidDataException("The plaque catalogue is missing.");
-            if (_artwork.Length != 10 || _artwork.Select(a => a.OrderGuid).Distinct(StringComparer.OrdinalIgnoreCase).Count() != 10)
-                throw new InvalidDataException("The ten approved dishes must have unique recipe identities.");
+            if (_artwork.Length != 12 || _artwork.Count(a => a.Drink) != 2 || _artwork.Select(a => a.OrderGuid).Distinct(StringComparer.OrdinalIgnoreCase).Count() != 12)
+                throw new InvalidDataException("The ten dishes and two drinks must have unique recipe identities.");
             foreach (var art in _artwork)
             {
                 if (!Guid.TryParse(art.OrderGuid, out _) || Path.GetFileName(art.File) != art.File || art.Yen <= 0)
                     throw new InvalidDataException("Invalid plaque catalogue entry.");
-                using var sha = SHA256.Create(); using var stream = File.OpenRead(Path.Combine(_folder, "art", art.File));
-                string hash = BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", "");
-                if (!hash.Equals(art.Sha256, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Approved artwork changed: " + art.File);
+                VerifyArt(art.File, art.Sha256);
+                if (art.Drink)
+                {
+                    VerifyArt(art.DarkFile, art.DarkSha256); VerifyArt(art.DarkMaskFile, art.DarkMaskSha256);
+                    if (art.DarkGrainA == art.DarkGrainB || !_artwork.Any(a => !a.Drink && a.File == art.DarkGrainA)
+                        || !_artwork.Any(a => !a.Drink && a.File == art.DarkGrainB)) throw new InvalidDataException("Drink grain references must identify two approved wood masters.");
+                }
             }
             T Read<T>(string name) where T : class
             {
@@ -72,15 +84,61 @@ public sealed class Plugin : BaseUnityPlugin
             _holder = Read<HolderDefinition>("HolderManifest.json"); _parts = Read<HolderParts>("HolderParts.json");
             _seven = Read<HolderDefinition>("HolderManifest.Seven.json"); _sevenParts = Read<HolderParts>("HolderParts.Seven.json");
             AutoLayout.RightToLeft(_holder); AutoLayout.RightToLeft(_seven);
+            _catalog = new LiveBoardCatalog(transform, _holder, _seven, text => Logger.LogInfo(text));
+            try { _certificates = new CertificateCatalog(transform, _folder, text => Logger.LogInfo(text)); }
+            catch (Exception ex) { _certificateError = ex.Message; Logger.LogWarning("Certificate additions unavailable: " + ex.Message); }
             _harmony = new Harmony(Id); _harmony.PatchAll(GetType().Assembly);
-            if (_harmony.GetPatchedMethods().Count() != 5) throw new InvalidOperationException("All five menu and decoration observation hooks are required.");
+            if (_harmony.GetPatchedMethods().Count() != 11) throw new InvalidOperationException("All eleven menu, item, description and decoration hooks are required.");
+            RegisterBoards(ItemsInfoDatabase.GetOrLoad());
             _paperBeer = new PaperBeerPriceFix(_folder, text => Logger.LogInfo(text), WriteStatus);
             SceneManager.sceneLoaded += SceneLoaded; SceneManager.sceneUnloaded += SceneUnloaded;
             _ready = true; RequestDiscovery();
-            Logger.LogInfo("PlaqueRamen ready. Bright nine-plaque and dark seven-plaque holders follow the ticket machine automatically. Limited holders prioritise expensive dishes.");
+            Logger.LogInfo("PlaqueRamen ready. New Live Menu Board Shelves follow dishes and drinks automatically; existing native boards remain static.");
         }
         catch (Exception ex) { _harmony?.UnpatchSelf(); _message = ex.Message; Logger.LogError("PlaqueRamen inactive: " + ex); }
         WriteStatus();
+    }
+
+    private void OnGUI()
+    {
+        if (!_ready) return;
+        (_startupBadge ??= new StartupBadge(Version)).Draw();
+    }
+
+    private void VerifyArt(string file, string expected)
+    {
+        if (string.IsNullOrWhiteSpace(file) || Path.GetFileName(file) != file) throw new InvalidDataException("Invalid artwork file name.");
+        using var sha = SHA256.Create(); using var stream = File.OpenRead(Path.Combine(_folder, "art", file));
+        string hash = BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", "");
+        if (!hash.Equals(expected, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Approved artwork changed: " + file);
+    }
+
+    internal void RegisterBoards(ItemsInfoDatabase database)
+    {
+        try { _catalog?.Register(database); }
+        catch (Exception ex)
+        {
+            if (_catalogError != ex.Message) { _catalogError = ex.Message; Logger.LogError("Live board registration waiting: " + ex); }
+        }
+        try { _certificates?.Register(database); if(_certificates?.Ready==true)_certificateError=""; }
+        catch (Exception ex)
+        {
+            if (_certificateError != ex.Message) { _certificateError = ex.Message; Logger.LogWarning("Certificate registration waiting: " + ex.Message); }
+        }
+    }
+    internal void MapBoardUnlock(ref SerializableGuid guid)
+    {
+        if (_catalog != null && _catalog.TryNative(guid, out var native)) guid = native;
+        else if (_certificates != null && _certificates.TryNative(guid, out var certificate)) guid = certificate;
+    }
+
+    internal bool TryBoardDescription(string key,out string nativeKey,out string fallback)
+    {
+        nativeKey="";fallback="";return _catalog?.TryDescription(key,out nativeKey,out fallback)==true;
+    }
+    internal bool TryCertificateText(string key,out string text)
+    {
+        text="";return _certificates?.TryText(key,out text)==true;
     }
 
     internal void Observe(ViewController_Kenbaiki view, DecalProjector[] anchors)
@@ -106,7 +164,9 @@ public sealed class Plugin : BaseUnityPlugin
     }
 
     internal void Changed(ViewController_Kenbaiki view) { if (_menus.ContainsKey(view)) _dirty = true; }
-    internal void QueueDecoration(Decoration decoration) { if (_ready && decoration) _pending.Add(decoration); }
+    internal void ConfigureCertificatePlacement(Decoration decoration) { if(_ready)_certificates?.ConfigurePlacement(decoration); }
+    internal void QueueDecoration(Decoration decoration)
+    { if (_ready && decoration){ConfigureCertificatePlacement(decoration);_pending.Request(decoration,Time.realtimeSinceStartup);} }
     internal void RequestDiscovery()
     {
         _discovery.Request(Time.realtimeSinceStartup); _paperBeer?.RequestScan(); _dirty = true;
@@ -123,9 +183,13 @@ public sealed class Plugin : BaseUnityPlugin
         }
         if (_pending.Count > 0)
         {
-            foreach (var decoration in _pending.ToArray())
-                if (decoration) foreach (var filter in decoration.GetComponentsInChildren<MeshFilter>(true)) Discover(filter);
-            _pending.Clear();
+            foreach (var decoration in _pending.Due(Time.realtimeSinceStartup))
+                if (decoration)
+                {
+                    _targetChecks++;
+                    foreach (var filter in decoration.GetComponentsInChildren<MeshFilter>(true)) Discover(filter);
+                    _paperBeer?.Observe(decoration);
+                }
         }
         if (!_dirty && Time.realtimeSinceStartup < _nextMenuCheck) return;
         _dirty = false; _nextMenuCheck = Time.realtimeSinceStartup + .5f;
@@ -139,12 +203,14 @@ public sealed class Plugin : BaseUnityPlugin
 
     private void Discover(MeshFilter filter)
     {
+        _certificates?.Observe(filter);
         if (!filter || _holders.ContainsKey(filter) || _rejected.Contains(filter.GetInstanceID()) || !filter.gameObject.scene.IsValid()
-            || !filter.gameObject.scene.isLoaded || !HolderBinding.IsPlaced(filter)) return;
+            || !filter.gameObject.scene.isLoaded) return;
         var mesh = filter.sharedMesh;
         if (!mesh) return;
         var definition = mesh.vertexCount == _holder.VertexCount ? _holder : mesh.vertexCount == _seven.VertexCount ? _seven : null;
         if (definition == null || mesh.subMeshCount != definition.SubmeshCount) return;
+        if(!HolderBinding.IsPlaced(filter)||!LiveBoardCatalog.IsLive(filter))return;
         var renderer = filter.GetComponent<Renderer>();
         if (!renderer || !renderer.enabled || renderer.forceRenderingOff) return;
         var mats = renderer.sharedMaterials;
@@ -173,7 +239,7 @@ public sealed class Plugin : BaseUnityPlugin
         var entries = menu.SelectedRecipeIndexDict.Select(p => new MenuEntry(p.Key, p.Value ? p.Value.GUID.ToString() : "", p.Value ? p.Value.price : 0, p.Value is RamenOrderData)).ToArray();
         string signature = string.Join("|", entries.OrderBy(e => e.ButtonId).Select(e => e.ButtonId + ":" + e.Guid + ":" + e.Yen + ":" + e.Ramen));
         if (_plan == null || signature != _signature) { _plan = MenuPlan.Build(entries, _artwork); _signature = signature; }
-        if (_holders.Count == 0) { SetMessage("Waiting for a seven- or nine-plaque Menu Board Shelf."); return; }
+        if (_holders.Count == 0) { SetMessage("Waiting for a purchased Live Menu Board Shelf. Native boards remain original."); return; }
         _textures ??= new PlaqueTextures(_folder);
         var needed = _holders.Values.SelectMany(h => MenuPlan.ForCapacity(_plan, h.Capacity)).GroupBy(p => p.Art.Id).Select(g => g.First());
         var missing = needed.FirstOrDefault(p => !_textures.Has(p.Art));
@@ -186,7 +252,7 @@ public sealed class Plugin : BaseUnityPlugin
         int changed = 0;
         foreach (var holder in _holders.Values) if (holder.Apply(_plan, signature, _textures)) changed++;
         if (changed > 0) _updates++;
-        SetMessage("Automatically syncing " + _holders.Values.Count(h => h.Applied) + " holder(s) from " + _plan.Length + " menu dishes; each holder keeps its native fixed fasteners.", changed > 0);
+        SetMessage("Automatically syncing " + _holders.Values.Count(h => h.Applied) + " live holder(s) from " + _plan.Length + " menu items; drinks on the left, fixed native fasteners.", changed > 0);
     }
 
     private void SetMessage(string message, bool refresh = false)
@@ -202,7 +268,7 @@ public sealed class Plugin : BaseUnityPlugin
         { _holders[key].Dispose(); _holders.Remove(key); }
         foreach (var view in _menus.Where(p => !p.Key || !p.Value || p.Value.gameObject.scene == scene).Select(p => p.Key).ToArray()) _menus.Remove(view);
         _pending.RemoveWhere(d => !d || d.gameObject.scene == scene);
-        _paperBeer?.SceneUnloaded(); _plan = null; _signature = ""; _dirty = true; WriteStatus();
+        _paperBeer?.SceneUnloaded(); _certificates?.SceneUnloaded(scene); _plan = null; _signature = ""; _dirty = true; WriteStatus();
     }
 
     private void WriteStatus()
@@ -213,7 +279,9 @@ public sealed class Plugin : BaseUnityPlugin
             string text = JsonConvert.SerializeObject(new { version = Version, utc = DateTime.UtcNow.ToString("O"), ready = _ready,
                 automatic = true, observedMachines = _menus.Count, trackedHolders = _holders.Count, appliedHolders = _holders.Values.Count(h => h.Applied),
                 message = _message, syncUpdates = _updates, importedTextures = _imports, lastImportMs = _lastImportMs, sceneScans = _sceneScans,
-                displayed, holders = _holders.Values.Select(h => h.Status).ToArray(),
+                targetedDecorationChecks=_targetChecks,
+                displayed, holders = _holders.Values.Select(h => h.Status).ToArray(), liveItems = _catalog?.Status,
+                certificates = _certificates?.Status, certificateError = _certificateError,
                 paperBeer = new { appliedSlots = _paperBeer?.Applied ?? 0, readbacks = _paperBeer?.Readbacks ?? 0,
                     sourceMatchError = _paperBeer?.MatchError ?? 0, message = _paperBeer?.Message } }, Formatting.Indented);
             File.WriteAllText(Path.Combine(Paths.ConfigPath, Id + ".status.json"), text);
@@ -223,9 +291,10 @@ public sealed class Plugin : BaseUnityPlugin
 
     private void OnDestroy()
     {
+        LiveBoardDividers.RestoreAll();
         _ready = false; SceneManager.sceneLoaded -= SceneLoaded; SceneManager.sceneUnloaded -= SceneUnloaded; _harmony?.UnpatchSelf();
         foreach (var holder in _holders.Values) holder.Dispose();
-        _holders.Clear(); _textures?.Dispose(); _paperBeer?.Dispose(); Instance = null;
+        _holders.Clear(); _textures?.Dispose(); _paperBeer?.Dispose(); _certificates?.Dispose(); _catalog?.Dispose(); Instance = null;
     }
 }
 
@@ -247,10 +316,17 @@ internal static class ObserveMenuRemove
 [HarmonyPatch(typeof(Decoration), "Start", new Type[] { })]
 internal static class ObserveDecorationLoad
 {
+    private static void Prefix(Decoration __instance) => Plugin.Instance?.ConfigureCertificatePlacement(__instance);
     private static void Postfix(Decoration __instance) => Plugin.Instance?.QueueDecoration(__instance);
 }
 [HarmonyPatch(typeof(DecorationService), "PutDownDeco", new Type[] { })]
 internal static class ObserveDecorationPlacement
 {
-    private static void Postfix() => Plugin.Instance?.RequestDiscovery();
+    private static void Prefix(DecorationService __instance,out Decoration? __state)
+    {
+        var held=__instance.RuntimeHeldDeco;
+        __state=held?held.GetDecoration:null;
+    }
+    private static void Postfix(Decoration? __state)
+    { if(__state)Plugin.Instance?.QueueDecoration(__state); }
 }

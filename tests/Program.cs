@@ -18,7 +18,7 @@ void Refuses(Action action, string reason)
 }
 
 var arts = JsonSerializer.Deserialize<Artwork[]>(File.ReadAllText(Path.Combine(root, "assets/Artwork.json")), json)!;
-Check(arts.Length == 10 && arts.Select(a => a.Id).Distinct().Count() == 10 && arts.Select(a => a.OrderGuid).Distinct().Count() == 10, "ten distinct artwork/recipe pairs");
+Check(arts.Length == 12 && arts.Count(a => a.Drink) == 2 && arts.Select(a => a.Id).Distinct().Count() == 12 && arts.Select(a => a.OrderGuid).Distinct().Count() == 12, "ten dishes and two drinks with distinct artwork/recipe identities");
 foreach (var art in arts)
 {
     Check(Guid.TryParse(art.OrderGuid, out _), "recipe GUID: " + art.Dish);
@@ -196,9 +196,20 @@ try
     heldState.ReturnType = native.MainModule.TypeSystem.Single; native.Write(scratch);
     Refuses(() => Compatibility.Inspect(scratch), "changed held-decoration state API disables activation");
     heldState.ReturnType = native.MainModule.TypeSystem.Boolean;
+    var lockApi = native.MainModule.GetType("SaveSystem.SaveManager").Methods.Single(m => m.Name == "GetLockState");
+    lockApi.Name = "ChangedLockApi"; native.Write(scratch);
+    Refuses(() => Compatibility.Inspect(scratch), "changed live-item unlock contract disables activation before save loading");
+    lockApi.Name = "GetLockState";
     native.MainModule.GetType("UI.Data_Scripts.OrderData").Fields.Single(f => f.Name == "price").FieldType = native.MainModule.TypeSystem.Single;
     native.Write(scratch);
     Refuses(() => Compatibility.Inspect(scratch), "changed required price API disables activation");
+    native.MainModule.GetType("UI.Data_Scripts.OrderData").Fields.Single(f=>f.Name=="price").FieldType=native.MainModule.TypeSystem.Int32;
+    var floor=native.MainModule.GetType("PlacementType").Fields.Single(f=>f.Name=="Floor");floor.Constant=8;native.Write(scratch);
+    Refuses(()=>Compatibility.Inspect(scratch),"changed native floor-placement meaning disables certificate mounting");
+    floor.Constant=1;
+    var variantLoad=native.MainModule.GetType("Runtime_Classes.Common.RuntimeInteractable").Methods.Single(m=>m.Name=="LoadVariant");
+    variantLoad.Name="ChangedLoadVariant";native.Write(scratch);
+    Refuses(()=>Compatibility.Inspect(scratch),"changed variant-loading hook is rejected before a tabletop item can keep wall-only placement");
 }
 finally { if (File.Exists(scratch)) File.Delete(scratch); }
 
@@ -206,22 +217,59 @@ using var dll = AssemblyDefinition.ReadAssembly(Path.Combine(root, "src/bin/Rele
 IEnumerable<TypeDefinition> Types(IEnumerable<TypeDefinition> ts) => ts.SelectMany(t => new[] { t }.Concat(Types(t.NestedTypes)));
 var instructions = Types(dll.MainModule.Types).SelectMany(t => t.Methods).Where(m => m.HasBody).SelectMany(m => m.Body.Instructions).ToArray();
 var calls = instructions.Select(i => i.Operand).OfType<MethodReference>().ToArray();
-Check(Types(dll.MainModule.Types).Count(t => t.CustomAttributes.Any(a => a.AttributeType.FullName == "HarmonyLib.HarmonyPatch")) == 5, "three menu and two decoration observation hooks");
+var catalogueType = Types(dll.MainModule.Types).Single(t => t.FullName == "PlaqueRamen.LiveBoardCatalog");
+var itemIds = catalogueType.Fields.Where(f => f.IsLiteral && f.Name.EndsWith("Id")).Select(f => (string)f.Constant).ToArray();
+Check(itemIds.Length == 4 && itemIds.Distinct().Count() == 4 && itemIds.All(s => Guid.TryParse(s,out _)), "both live identities are distinct from each other and both reviewed native identities");
+Check(!catalogueType.Methods.Single(m=>m.Name=="TryNative").Body.Instructions.Select(i=>i.Operand).OfType<MethodReference>()
+    .Any(m=>m.DeclaringType.FullName.StartsWith("UnityEngine.")||m.DeclaringType.Scope.Name=="Assembly-CSharp"),
+    "frequent unlock lookups use cached identities with no Unity component or native variant queries");
+Check(Types(dll.MainModule.Types).Count(t => t.CustomAttributes.Any(a => a.AttributeType.FullName == "HarmonyLib.HarmonyPatch")) == 11, "menu, decoration, item registration, description, mounting and unlock observation hooks");
+var descriptionHook=Types(dll.MainModule.Types).Single(t=>t.Name=="LiveBoardDescriptions").Methods.Single(m=>m.Name=="Prefix").Body.Instructions.Select(i=>i.Operand).OfType<MethodReference>().ToArray();
+Check(descriptionHook.Any(m=>m.Name=="TryBoardDescription") && descriptionHook.Any(m=>m.DeclaringType.Name=="LocalizationService"&&m.Name=="GetLocalizedStringOrFallback")
+    && descriptionHook.Any(m=>m.DeclaringType.Name=="LocalizationService"&&m.Name=="SetNonLocalizedUIInfo"),
+    "shop description binding resolves original localised text and appends the live-menu explanation through the native label API");
+Check(descriptionHook.Any(m=>m.Name=="TryCertificateText"),"certificate names and flavour text are resolved by the actual shop label binding rather than left only in unused metadata fields");
+Check(descriptionHook.Any(m=>m.DeclaringType.Name=="LiveBoardDividers"&&m.Name=="Preserve") && descriptionHook.Any(m=>m.DeclaringType.Name=="LiveBoardDividers"&&m.Name=="Restore"),
+    "the shared shop preview preserves the native divider cap for live items and restores it for native items");
+Check(Math.Abs(NativeDividerLayout.Cap(60,0,2)-60f/98)<.00001f && NativeDividerLayout.Cap(140,0,2)==1,
+    "native one-percent divider limit matches short descriptions and stays at one pixel for longer ones");
+Check(Math.Abs(NativeDividerLayout.Cap(60,8,2)-68f/98)<.00001f && float.IsNaN(NativeDividerLayout.Cap(float.NaN,0,2)),
+    "divider sizing preserves native group spacing and ignores uninitialised text metrics");
 Check(!calls.Any(m => m.DeclaringType.FullName == "ES3" && m.Name.StartsWith("Save")), "no game save writes");
-Check(!instructions.Any(i => i.OpCode == OpCodes.Stfld && i.Operand is FieldReference f && f.DeclaringType.Scope.Name == "Assembly-CSharp"), "no native recipe, price or menu field writes");
-Check(!calls.Any(m => m.DeclaringType.FullName == "UnityEngine.Material" && m.Name is "SetTexture" or "set_mainTexture" or ".ctor"), "no shared material replacement or texture mutation");
+Check(!instructions.Any(i => i.OpCode == OpCodes.Stfld && i.Operand is FieldReference f
+    && f.DeclaringType.FullName is "UI.Data_Scripts.OrderData" or "UI.Data_Scripts.RamenOrderData" or "UI.ViewController_Infos.Scripts.ViewController_Kenbaiki"), "no native recipe, selling price or menu field writes");
+Check(Types(dll.MainModule.Types).SelectMany(t => t.Methods).Where(m => m.HasBody && !m.DeclaringType.FullName.StartsWith("PlaqueRamen.LiveBoardCatalog") && !m.DeclaringType.FullName.StartsWith("PlaqueRamen.CertificateCatalog"))
+    .All(m => !m.Body.Instructions.Any(i => i.OpCode == OpCodes.Stfld && i.Operand is FieldReference f && f.DeclaringType.Scope.Name == "Assembly-CSharp")),
+    "only item registrars write variant metadata, including the requested original-certificate text override");
+Check(Types(dll.MainModule.Types).SelectMany(t=>t.Methods).Where(m=>m.HasBody && !(m.DeclaringType.FullName=="PlaqueRamen.CertificateCatalog" && m.Name=="CreateSurface"))
+    .All(m=>!m.Body.Instructions.Any(i=>i.Operand is MethodReference r && r.DeclaringType.FullName=="UnityEngine.Material" && r.Name is "SetTexture" or "set_mainTexture" or ".ctor")),
+    "only the certificate surface factory may construct or texture its owned material copies; existing menu materials remain untouched");
+var certificateSurface=Types(dll.MainModule.Types).Single(t=>t.FullName=="PlaqueRamen.CertificateCatalog").Methods.Single(m=>m.Name=="CreateSurface");
+Check(certificateSurface.Body.Instructions.Select(i=>i.Operand).OfType<MethodReference>().Where(m=>m.DeclaringType.FullName=="UnityEngine.Material"&&m.Name==".ctor")
+    .All(m=>m.Parameters.Count==1&&m.Parameters[0].ParameterType.FullName=="UnityEngine.Material"),"certificate materials clone the native lit shader instead of replacing it with an unrelated rendering style");
 Check(calls.Any(m => m.DeclaringType.FullName == "UnityEngine.Renderer" && m.Name == "SetPropertyBlock"), "per-slot texture overrides");
 Check(calls.Any(m => m.DeclaringType.FullName == "UnityEngine.Object" && m.Name == "Instantiate"), "private clone of original mesh");
-Check(calls.Count(m => m.DeclaringType.FullName == "UnityEngine.Mesh" && m.Name == "set_vertices") == 1,
-    "private mesh has one controlled vertex update for the rear mount extension");
+Check(Types(dll.MainModule.Types).Single(t=>t.FullName=="PlaqueRamen.HolderBinding").Methods.Where(m=>m.HasBody).SelectMany(m=>m.Body.Instructions)
+    .Count(i=>i.Operand is MethodReference m && m.DeclaringType.FullName == "UnityEngine.Mesh" && m.Name == "set_vertices") == 1,
+    "menu holder mesh retains its single controlled vertex update for the rear mount extension");
 var syncBody = Types(dll.MainModule.Types).Single(t => t.FullName == "PlaqueRamen.HolderBinding").Methods.Single(m => m.Name == "Apply").Body.Instructions;
 Check(!syncBody.Any(i => i.OpCode == OpCodes.Stfld && i.Operand is FieldReference f && f.DeclaringType.FullName == "UnityEngine.Vector3" && f.Name is "x" or "y"),
     "runtime never changes sideways or vertical hook/board coordinates");
 Check(!Types(dll.MainModule.Types).Any(t => t.Name == "HolderPlacement"), "continuous translation of boards/hooks has been retired");
-Check(!calls.Any(m => m.DeclaringType.FullName == "UnityEngine.GameObject" && m.Name == "SetActive"), "no saved game object activation changes");
+Check(Types(dll.MainModule.Types).SelectMany(t => t.Methods).Where(m => m.HasBody)
+    .Where(m => m.Body.Instructions.Any(i => i.Operand is MethodReference call && call.DeclaringType.FullName == "UnityEngine.GameObject" && call.Name == "SetActive"))
+    .All(m => m.IsConstructor && m.DeclaringType.FullName is "PlaqueRamen.LiveBoardCatalog" or "PlaqueRamen.CertificateCatalog"), "only the private inactive template containers change activation");
 Check(!calls.Any(m => m.DeclaringType.FullName == "UnityEngine.Time" && m.Name.StartsWith("set_")), "no global timing changes");
 Check(!calls.Any(m => m.Name is "get_f9Key" or "get_f10Key"), "RTSS hotkeys avoided");
-Check(!Types(dll.MainModule.Types).SelectMany(t => t.Methods).Any(m => m.Name == "OnGUI"), "no permanent development overlay");
+var loadingBadge = Types(dll.MainModule.Types).Single(t => t.FullName == "PlaqueRamen.StartupBadge");
+var badgeDraw = loadingBadge.Methods.Single(m => m.Name == "Draw").Body.Instructions;
+Check(Types(dll.MainModule.Types).SelectMany(t => t.Methods).Where(m => m.Name == "OnGUI").All(m => m.DeclaringType.FullName == "PlaqueRamen.Plugin")
+    && badgeDraw.Any(i => i.Operand is FieldReference f && f.Name == "_expired")
+    && badgeDraw.Any(i => i.OpCode == OpCodes.Ldc_R4 && Equals(i.Operand, 3f))
+    && badgeDraw.Any(i => i.Operand is MethodReference m && m.DeclaringType.FullName == "UnityEngine.Time" && m.Name == "get_realtimeSinceStartup")
+    && Types(dll.MainModule.Types).SelectMany(t => t.Methods).Where(m => m.HasBody && m.Body.Instructions.Any(i => i.Operand is MethodReference call && call.DeclaringType.FullName == "UnityEngine.GUI" && call.Name == "Label"))
+        .All(m => m.DeclaringType == loadingBadge && m.Name == "Draw"),
+    "only a three-real-second startup label draws GUI text; no permanent development overlay");
 Check(dll.MainModule.Resources.Any(r => r.Name == "PlaqueRamen.HolderManifest.json"), "reviewed holder partition embedded");
 Check(dll.MainModule.Resources.Any(r => r.Name == "PlaqueRamen.HolderParts.json"), "reviewed hook/wood separation embedded");
 Check(!dll.MainModule.AssemblyReferences.Any(a => a.Name == "Unity.InputSystem")
@@ -231,7 +279,13 @@ var pluginType = Types(dll.MainModule.Types).Single(t => t.FullName == "PlaqueRa
 Check(pluginType.Methods.Single(m => m.Name == "SceneLoaded").Body.Instructions.Any(i => i.Operand is MethodReference m && m.Name == "RequestDiscovery"),
     "every loaded scene schedules automatic holder discovery");
 Check(Types(dll.MainModule.Types).Single(t => t.Name == "ObserveDecorationPlacement").Methods.Single(m => m.Name == "Postfix")
-    .Body.Instructions.Any(i => i.Operand is MethodReference m && m.Name == "RequestDiscovery"), "placing a decoration schedules automatic discovery");
+    .Body.Instructions.Any(i => i.Operand is MethodReference m && m.Name == "QueueDecoration"), "placing a decoration schedules discovery for its captured target");
+Check(!Types(dll.MainModule.Types).Single(t=>t.Name=="ObserveDecorationPlacement").Methods.Where(m=>m.HasBody)
+    .SelectMany(m=>m.Body.Instructions).Any(i=>i.Operand is MethodReference m&&m.Name=="RequestDiscovery"),
+    "ordinary furniture placement never schedules whole-scene plaque or paper-sign sweeps");
+Check(Types(dll.MainModule.Types).Single(t=>t.Name=="ObserveDecorationPlacement").Methods.Single(m=>m.Name=="Prefix")
+    .Body.Instructions.Any(i=>i.Operand is MethodReference m&&m.Name=="get_RuntimeHeldDeco"),
+    "placement captures the held decoration before inventory cycling changes the native target");
 Check(Types(dll.MainModule.Types).Single(t => t.Name == "ObserveDecorationLoad").Methods.Single(m => m.Name == "Postfix")
     .Body.Instructions.Any(i => i.Operand is MethodReference m && m.Name == "QueueDecoration"), "decorations spawned after scene load are observed");
 var paperType = Types(dll.MainModule.Types).Single(t => t.Name == "PaperBeerPriceFix");
@@ -239,9 +293,15 @@ foreach (var pair in new[] { ("OriginalSha", "price-70.original.png"), ("Replace
     Check(Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path.Combine(root, "assets/paper-beer", pair.Item2)))) == (string)paperType.Fields.Single(f => f.Name == pair.Item1).Constant,
         "paper price artwork matches the runtime hash: " + pair.Item2);
 AutomaticChecks.Run(holder, Check, Refuses);
-SevenPlaqueChecks.Run(root, arts, Check, Refuses);
+SevenPlaqueChecks.Run(root, arts.Where(a => !a.Drink).ToArray(), Check, Refuses);
+DrinkChecks.Run(root, arts, Check, Refuses);
+CertificateChecks.Run(root, Check, Refuses);
+CertificateFinishChecks.Run(root,Check,Refuses);
+CertificateIconChecks.Run(Check,Refuses);
 
 PaperPriceChecks.Run(Check, Refuses);
-if (args.Contains("--render-dark")) DarkPreview.Run(root, arts, Check);
+if (args.Contains("--render-dark")) DarkPreview.Run(root, arts.Where(a => !a.Drink).ToArray(), Check);
+if (args.Contains("--render-drinks")) DrinkPreview.Run(root, arts.Where(a => a.Drink).ToArray(), Check);
+if (args.Contains("--render-certificates")) CertificatePreview.Run(root, Check);
 
 Console.WriteLine($"{count} PlaqueRamen checks passed.");

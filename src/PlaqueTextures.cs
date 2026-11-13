@@ -71,11 +71,11 @@ internal sealed class PlaqueTextures : IDisposable
                 throw new InvalidDataException("Approved artwork dimensions changed: " + art.File);
             var raw = image.GetPixels32(); var pixels = new Pixel[raw.Length];
             for (int i = 0; i < raw.Length; i++) { var p = raw[i]; pixels[i] = new Pixel(p.r, p.g, p.b, p.a); }
-            var face = _surface.Compose(pixels, image.width, image.height, art);
+            var face = art.Drink ? _surface.ComposeDrink(pixels, image.width, image.height, art) : _surface.Compose(pixels, image.width, image.height, art);
             var next = (Color32[])_base.Clone(); var mask = (Color32[])_gloss.Clone();
             // Both styles occupy separate atlas regions. One cached pair per
             // recipe serves both holder types, retaining the original cache size.
-            var dark = _dark.Compose(pixels, image.width, image.height, art);
+            var dark = art.Drink ? DrinkDark(art) : _dark.Compose(pixels, image.width, image.height, art);
             for (int y = 0; y < DarkPlaqueSurface.Height; y++) for (int x = 0; x < DarkPlaqueSurface.Width; x++)
             {
                 int index = (DarkPlaqueSurface.Y + y) * Size + DarkPlaqueSurface.X + x, source = y * DarkPlaqueSurface.Width + x;
@@ -94,6 +94,32 @@ internal sealed class PlaqueTextures : IDisposable
             _cache.Add(art.Id, new Pair(albedo, gloss)); albedo = gloss = null;
         }
         finally { UnityEngine.Object.Destroy(image); if (albedo) UnityEngine.Object.Destroy(albedo); if (gloss) UnityEngine.Object.Destroy(gloss); }
+    }
+
+    private (Pixel[] Albedo, Pixel[] Gloss) DrinkDark(Artwork art)
+    {
+        Texture2D? face = null, mask = null;
+        try
+        {
+            face = Load(Path.Combine(_folder, "art", art.DarkFile), false);
+            mask = Load(Path.Combine(_folder, "art", art.DarkMaskFile), true);
+            if (mask.width != face.width || mask.height != face.height) throw new InvalidDataException("Drink face/mask dimensions differ.");
+            Pixel[] Pixels(Texture2D t)
+            {
+                var colors = t.GetPixels32(); var result = new Pixel[colors.Length];
+                for (int i = 0; i < result.Length; i++) { var p = colors[i]; result[i] = new Pixel(p.r, p.g, p.b, p.a); }
+                return result;
+            }
+            GrainImage Grain(string file)
+            {
+                var texture = Load(Path.Combine(_folder, "art", file), false);
+                try { return new GrainImage(Pixels(texture), texture.width, texture.height); }
+                finally { UnityEngine.Object.Destroy(texture); }
+            }
+            var a = Grain(art.DarkGrainA); var b = Grain(art.DarkGrainB);
+            return _dark.ComposeDrink(Pixels(face), Pixels(mask), face.width, face.height, a.Pixels, a.Width, a.Height, art, b);
+        }
+        finally { if (face) UnityEngine.Object.Destroy(face); if (mask) UnityEngine.Object.Destroy(mask); }
     }
 
     private static Texture2D Finish(Color32[] pixels, bool linear, string name)

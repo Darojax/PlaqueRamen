@@ -14,6 +14,9 @@
 !/tests/PlaqueRamen.Checks.csproj
 !/assets/
 !/assets/Artwork.json
+!/assets/Certificates.json
+!/assets/certificates/
+!/assets/certificates/*.png
 !/assets/T_Tanzaku001_BASE.original.png
 !/assets/T_Tanzaku001_GLOSS.original.png
 !/assets/art/

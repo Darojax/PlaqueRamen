@@ -90,6 +90,56 @@ internal sealed class PlaqueSurface
     internal static bool Inside(int x, int y) => X + x + .5f >= FaceLayout.FaceLeft && X + x + .5f <= FaceLayout.FaceRight
         && Y + y + .5f >= FaceLayout.FaceBottom && Y + y + .5f <= FaceLayout.FaceTop;
 
+    // Drink lettering has its own palette. Keep the established ramen composer
+    // unchanged, including all approved wood and black/red paint grading.
+    internal (Pixel[] Albedo, Pixel[] Gloss) ComposeDrink(Pixel[] image, int width, int height, Artwork art)
+    {
+        if (image.Length != width * height || width != 725 || height < 2169 || height > 2170)
+            throw new InvalidDataException("Unexpected drink artwork dimensions.");
+        var wood = new List<Pixel>(); var red = new List<Pixel>(); var blue = new List<Pixel>();
+        for (int y = 0; y < height; y += 2) for (int x = 140; x < 590; x += 2)
+        {
+            var p = image[y * width + x];
+            if (IsBlue(p)) blue.Add(p); else if (Kind(p) == PaintKind.Red) red.Add(p); else if (Kind(p) == PaintKind.Wood) wood.Add(p);
+        }
+        if (blue.Count < 100) throw new InvalidDataException("Blue drink lettering is missing.");
+        var blueGrade = new WoodGrade(WoodStatistics.Measure(blue), _nativeBlack.WithMean(new Pixel(47, 70, 95)));
+        var grade = new WoodGrade(WoodStatistics.Measure(wood), NativeWood);
+        var redGrade = new WoodGrade(WoodStatistics.Measure(red), _nativeRed);
+        var layout = new FaceLayout(height, art.InkTop, art.InkBottom);
+        var next = (Pixel[])_original.Clone(); var mask = (Pixel[])_gloss.Clone();
+        float span = (FaceLayout.FaceRight - FaceLayout.FaceLeft) * 635f / Width / FaceLayout.LetterWidthGain;
+        for (int y = 0; y < Height; y++)
+        {
+            float v = (Y + y + .5f - FaceLayout.FaceBottom) / (FaceLayout.FaceTop - FaceLayout.FaceBottom);
+            if (v < 0 || v > 1) continue;
+            for (int x = 0; x < Width; x++)
+            {
+                if (!Inside(x, y)) continue;
+                int i = y * Width + x;
+                float u = (X + x + .5f - FaceLayout.FaceLeft) / (FaceLayout.FaceRight - FaceLayout.FaceLeft);
+                float sy = layout.SourceV(v) * (height - 1);
+                // The generated PNG's extreme rows contain coloured transparent
+                // edge pixels. Use continuous bare grain just inside those rows,
+                // while preserving the approved ink mapping exactly.
+                if (v < FaceLayout.BottomMargin)
+                    sy = 16 + (layout.SourceLow * (height - 1) - 16) * v / FaceLayout.BottomMargin;
+                else if (v > 1 - FaceLayout.TopMargin)
+                    sy = layout.SourceHigh * (height - 1) + (height - 17 - layout.SourceHigh * (height - 1))
+                        * (v - 1 + FaceLayout.TopMargin) / FaceLayout.TopMargin;
+                var p = Sample(image, width, height, (width - 1) * .5f + (u - .5f) * span, sy);
+                bool inInk = sy >= height - 1 - art.InkBottom - 2 && sy <= height - 1 - art.InkTop + 2;
+                bool name = inInk && IsBlue(p), price = inInk && !name && Kind(p) == PaintKind.Red;
+                next[i] = name ? blueGrade.Apply(p) : price ? redGrade.Apply(p) : grade.Apply(p);
+                byte g = name ? _blackGloss : price ? _redGloss : Kind(_original[i]) == PaintKind.Wood ? _gloss[i].R : _woodGloss[y];
+                mask[i] = new Pixel(g, g, g, _gloss[i].A);
+            }
+        }
+        return (next, mask);
+    }
+
+    internal static bool IsBlue(Pixel p) => p.B > p.R * 1.12f && p.G > p.R * 1.08f;
+
     internal static PaintKind Kind(Pixel p)
     {
         int max = Math.Max(p.R, Math.Max(p.G, p.B)), min = Math.Min(p.R, Math.Min(p.G, p.B));
@@ -116,6 +166,7 @@ internal sealed class WoodStatistics
 {
     internal readonly double[] Mean, Deviation;
     private WoodStatistics(double[] mean, double[] deviation) { Mean = mean; Deviation = deviation; }
+    internal WoodStatistics WithMean(Pixel paint) => new(new double[] { paint.R, paint.G, paint.B }, (double[])Deviation.Clone());
     internal static WoodStatistics Measure(IEnumerable<Pixel> data)
     {
         var sums = new double[3]; var squares = new double[3]; int count = 0;

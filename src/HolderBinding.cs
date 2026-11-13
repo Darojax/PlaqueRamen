@@ -48,8 +48,8 @@ internal sealed class HolderBinding : IDisposable
         plan = MenuPlan.ForCapacity(plan, Capacity);
         var materials = _renderer.sharedMaterials;
         if (Applied && signature == _signature && materials.Length == Capacity + 1 && materials.All(m => m == _originalMaterials[0])) return false;
-        var groups = MenuPlan.Submeshes(_indices, _holder, _parts, _rightToLeft, plan.Length);
-        _occupied = MenuPlan.CenteredPlaques(_rightToLeft, plan.Length);
+        _occupied = MenuPlan.SlotRanks(plan, Capacity).Select(rank => _rightToLeft[rank]).ToArray();
+        var groups = MenuPlan.SubmeshesAt(_indices, _holder, _parts, _rightToLeft, _occupied);
         if (!_privateMesh)
         {
             _privateMesh = UnityEngine.Object.Instantiate(_originalMesh); _privateMesh.name = "PlaqueRamen_PrivateHolder";

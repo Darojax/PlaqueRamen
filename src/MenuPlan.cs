@@ -11,6 +11,10 @@ internal sealed class Artwork
     public string Id = "", OrderGuid = "", AssetName = "", Dish = "", File = "", Sha256 = "";
     public int Yen = 0;
     public int InkTop = 0, InkBottom = 0;
+    public bool Drink = false;
+    public int DrinkPriority = 0;
+    public string DarkFile = "", DarkSha256 = "", DarkMaskFile = "", DarkMaskSha256 = "";
+    public string DarkGrainA = "", DarkGrainB = "";
 }
 
 internal readonly struct MenuEntry
@@ -42,13 +46,15 @@ internal static class MenuPlan
         var result = new List<PlannedPlaque>();
         foreach (var entry in slots)
         {
-            if (!entry.Ramen || !seen.Add(entry.Guid)) continue;
+            if (!seen.Add(entry.Guid)) continue;
             var matches = artwork.Where(a => a.OrderGuid.Equals(entry.Guid, StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (!entry.Ramen && matches.Length == 0) continue;
             if (matches.Length != 1) throw new InvalidDataException("No unique approved plaque artwork for recipe " + entry.Guid + ".");
+            if (matches[0].Drink == entry.Ramen) throw new InvalidDataException("The recipe category changed for " + matches[0].Dish + ".");
             if (matches[0].Yen != entry.Yen) throw new InvalidDataException("The selling price changed for " + matches[0].Dish + "; plaque sync stopped to avoid displaying an incorrect price.");
             result.Add(new PlannedPlaque(entry.ButtonId, matches[0]));
         }
-        return result.ToArray();
+        return result.OrderBy(p => p.Art.Drink).ThenBy(p => p.ButtonId).ToArray();
     }
 
     internal static PlannedPlaque[] ForCapacity(PlannedPlaque[] plan, int capacity)
@@ -56,18 +62,39 @@ internal static class MenuPlan
         if (capacity is not (7 or 9)) throw new InvalidDataException("Unsupported plaque capacity.");
         // Price decides inclusion only. The retained dishes keep the agreed
         // ticket-machine reading order; ties favour the earlier machine button.
-        return plan.OrderByDescending(p => p.Art.Yen).ThenBy(p => p.ButtonId).Take(capacity).OrderBy(p => p.ButtonId).ToArray();
+        var food = plan.Where(p => !p.Art.Drink).OrderByDescending(p => p.Art.Yen).ThenBy(p => p.ButtonId).Take(capacity).OrderBy(p => p.ButtonId).ToArray();
+        var drinks = plan.Where(p => p.Art.Drink).OrderBy(p => p.Art.DrinkPriority).ThenBy(p => p.ButtonId)
+            .Take(capacity - food.Length).OrderBy(p => p.ButtonId);
+        return food.Concat(drinks).ToArray();
+    }
+
+    // Ranks run right-to-left. The span, including an optional separator, stays
+    // centred with the accepted right bias, while the native hooks never move.
+    internal static int[] SlotRanks(PlannedPlaque[] selected, int capacity)
+    {
+        if (capacity is not (7 or 9) || selected.Length > capacity) throw new InvalidDataException("Invalid plaque slot plan.");
+        int foods = selected.Count(p => !p.Art.Drink), drinks = selected.Length - foods;
+        if (selected.Take(foods).Any(p => p.Art.Drink)) throw new InvalidDataException("Food must precede drinks in right-to-left order.");
+        int gap = foods > 0 && drinks > 0 && selected.Length < capacity ? 1 : 0;
+        int start = (capacity - selected.Length - gap) / 2;
+        return Enumerable.Range(start, foods).Concat(Enumerable.Range(start + foods + gap, drinks)).ToArray();
     }
 
     internal static int[][] Submeshes(int[] source, HolderDefinition holder, HolderParts parts, int[] rightToLeft, int visible)
     {
-        int capacity = holder.Capacity;
+        return SubmeshesAt(source, holder, parts, rightToLeft, CenteredPlaques(rightToLeft, visible));
+    }
+
+    internal static int[][] SubmeshesAt(int[] source, HolderDefinition holder, HolderParts parts, int[] rightToLeft, int[] selected)
+    {
+        int capacity = holder.Capacity, visible = selected.Length;
         if (rightToLeft.Length != capacity || rightToLeft.Distinct().Count() != capacity || visible < 0 || visible > capacity
             || rightToLeft.Any(id => !holder.Plaques.Any(p => p.Id == id)))
             throw new InvalidDataException("Invalid right-to-left plaque assignment.");
+        if (selected.Distinct().Count() != visible || selected.Any(id => !rightToLeft.Contains(id)))
+            throw new InvalidDataException("Invalid occupied hook selection.");
         parts.Validate(holder, source);
         var wood = new HashSet<int>(parts.Plaques.SelectMany(p => p.BoardTriangleOffsets));
-        var selected = CenteredPlaques(rightToLeft, visible);
         var result = new int[capacity + 1][];
         // The rail and all native hooks/pins are permanent in material slot 0.
         result[0] = Enumerable.Range(0, source.Length / 3).Where(t => !wood.Contains(t))

@@ -108,5 +108,43 @@
     "Yen": 1500,
     "InkTop": 302,
     "InkBottom": 2036
+  },
+  {
+    "Id": "horizon-bottle",
+    "OrderGuid": "ff9476c7-a95e-4071-b5d8-5512a772e6d9",
+    "AssetName": "Order_Drink_Beer_Bottle",
+    "Dish": "Horizon Bottle",
+    "File": "horizon-bottle.png",
+    "Sha256": "2685b744225a149b3fd00e0d5f3c8107ff37bf120e8b26c65bd51fb625ee57b2",
+    "Yen": 450,
+    "InkTop": 232,
+    "InkBottom": 1986,
+    "Drink": true,
+    "DrinkPriority": 0,
+    "DarkFile": "horizon-bottle.dark.png",
+    "DarkSha256": "e8624339965c45c5996eaa61bf8014c83bc1dc5c2b332f80d3e80c0585163a1e",
+    "DarkMaskFile": "horizon-bottle.paint.png",
+    "DarkMaskSha256": "9e373ec9ef2ba4a6473507e2cd51328f861ea065b0732771604a95afb953219a",
+    "DarkGrainA": "sapporo.png",
+    "DarkGrainB": "hakata.png"
+  },
+  {
+    "Id": "horizon-draft",
+    "OrderGuid": "01989daa-07c8-4ee8-af7f-4da25db2f562",
+    "AssetName": "Order_Drink_Beer_Draft",
+    "Dish": "Horizon Draft",
+    "File": "horizon-draft.png",
+    "Sha256": "095fed802d12ea2dac38415db64ffc1a4a16a1df9272f4a7d7b2b8a29cf5167f",
+    "Yen": 550,
+    "InkTop": 213,
+    "InkBottom": 2010,
+    "Drink": true,
+    "DrinkPriority": 1,
+    "DarkFile": "horizon-draft.dark.png",
+    "DarkSha256": "390b612d55f2e2aaddbf30ee1afc287609e60072de3837853428cd7d3d54c9f3",
+    "DarkMaskFile": "horizon-draft.paint.png",
+    "DarkMaskSha256": "af077b3d2473f4c75a768e1d13b4d6df3acae83a48df50e5eae697872b2d13f4",
+    "DarkGrainA": "kitakata.png",
+    "DarkGrainB": "iekei.png"
   }
 ]

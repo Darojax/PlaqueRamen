@@ -72,7 +72,7 @@ internal static class DarkPreview
                 DarkPlaqueSurface.Bottom - DarkPlaqueSurface.Y + (y + .5f) / 819 * (DarkPlaqueSurface.Top - DarkPlaqueSurface.Bottom) - .5f);
         return output;
     }
-    private static (int Width, int Height, Pixel[] Pixels) Read(string path)
+    internal static (int Width, int Height, Pixel[] Pixels) Read(string path)
     {
         using var file = File.OpenRead(path);
         string Line() { var bytes = new List<byte>(); int b; while ((b = file.ReadByte()) >= 0 && b != 10) bytes.Add((byte)b); return Encoding.ASCII.GetString(bytes.ToArray()); }
@@ -83,7 +83,7 @@ internal static class DarkPreview
         for (int i = 0; i < pixels.Length; i++) pixels[i] = new Pixel(raw[3 * i], raw[3 * i + 1], raw[3 * i + 2]);
         return (w, h, pixels);
     }
-    private static void Write(string path, Pixel[] pixels, int w, int h)
+    internal static void Write(string path, Pixel[] pixels, int w, int h)
     {
         using var file = File.Create(path); file.Write(Encoding.ASCII.GetBytes($"P6\n{w} {h}\n255\n"));
         for (int y = h - 1; y >= 0; y--) for (int x = 0; x < w; x++)

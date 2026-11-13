@@ -5,6 +5,7 @@ using System.Linq;
 using System.Security.Cryptography;
 
 using UnityEngine;
+using Runtime_Classes.Pickups;
 
 namespace PlaqueRamen;
 
@@ -55,10 +56,19 @@ internal sealed class PaperBeerPriceFix : IDisposable
         _changed();
     }
 
-    private void Scan()
+    internal void Observe(Decoration decoration)
+    {
+        if(!decoration)return;
+        int before=_overrides.Count;
+        try{Scan(decoration.GetComponentsInChildren<Renderer>(true));}
+        catch(Exception ex){Message="Paper price correction skipped: "+ex.Message;_log(Message);}
+        if(_overrides.Count!=before)_changed();
+    }
+
+    private void Scan(IEnumerable<Renderer>? selection = null)
     {
         _overrides.RemoveAll(o => !o.Renderer);
-        foreach (var renderer in UnityEngine.Object.FindObjectsByType<Renderer>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+        foreach (var renderer in selection??UnityEngine.Object.FindObjectsByType<Renderer>(FindObjectsInactive.Include, FindObjectsSortMode.None))
         {
             if (!renderer || !renderer.gameObject.scene.IsValid() || !renderer.gameObject.scene.isLoaded) continue;
             var materials = renderer.sharedMaterials;

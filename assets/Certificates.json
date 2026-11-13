@@ -1,0 +1,215 @@
+[
+  {
+    "Id": "family-appreciation-2023",
+    "Guid": "eee9b24c-64f7-4e90-acfd-48a4749b7bd5",
+    "Name": "Certificate of Appreciation",
+    "Description": "A framed thank-you from the family. Some things are worth keeping.",
+    "File": "family-appreciation-2023.png",
+    "Sha256": "7580BA84E88E15F507B7F64C851460CCD230609DFC6BDAD90D9CFF3BE3C3FC26",
+    "Crop": [
+      32,
+      32,
+      1382,
+      967
+    ],
+    "Width": 0,
+    "Height": 0,
+    "RecentPaper": true,
+    "FrameTint": [
+      1,
+      1,
+      1
+    ]
+  },
+  {
+    "Id": "food-hygiene-1957",
+    "Guid": "272c3884-f60e-4915-9452-ef243c59b311",
+    "Name": "Food Hygiene Award",
+    "Description": "A wall-hung award for keeping a spotless kitchen. Best keep it that way.",
+    "File": "food-hygiene-1957.png",
+    "Sha256": "C5A937A9B06B218E2ED433BD88FDA69541633DF2B36345D8ED1118739CE4CCDF",
+    "Crop": [
+      0,
+      0,
+      1448,
+      1086
+    ],
+    "Width": 0.452,
+    "Height": 0.357,
+    "FrameTint": [
+      1,
+      1,
+      1
+    ],
+    "Mount": "Wall",
+    "FrameStyle": "oak",
+    "BorderScale": 1.35,
+    "DisplayLedge": true
+  },
+  {
+    "Id": "community-commendation-1981",
+    "Guid": "9b510410-6122-4a9d-814f-39c54551f7b2",
+    "Name": "Community Commendation",
+    "Description": "A small wall award from the local shopping street. Good neighbours make good business.",
+    "File": "community-commendation-1981.png",
+    "Sha256": "021A8EE9D1F3B0C847DFC47F2B97D9F4B07EE718E9D565CFEFF773762307287D",
+    "Crop": [
+      0,
+      0,
+      1086,
+      1448
+    ],
+    "Width": 0.262,
+    "Height": 0.339,
+    "FrameTint": [
+      1,
+      1,
+      1
+    ],
+    "Mount": "Wall",
+    "FrameStyle": "mahogany",
+    "BorderScale": 0.6
+  },
+  {
+    "Id": "restaurant-operating-permit-9",
+    "Guid": "f9876eec-2dfc-467b-bf9d-76bfbebc8f20",
+    "Name": "Operating Permit - Sunset Yokocho 9",
+    "Description": "A wall-mounted permit to serve food. Even ramen shops have paperwork.",
+    "File": "restaurant-operating-permit-9.png",
+    "Sha256": "93B92CEF30E44B8775EC3D461B1BB3E36FEB2FB4D3836E18A1687EF6A62AED14",
+    "Crop": [
+      0,
+      0,
+      1055,
+      1491
+    ],
+    "Width": 0.224,
+    "Height": 0.312,
+    "Price": 2000,
+    "RecentPaper": true,
+    "FrameTint": [
+      1,
+      1,
+      1
+    ],
+    "Mount": "Wall",
+    "FrameStyle": "metal",
+    "BorderScale": 0.25
+  },
+  {
+    "Id": "restaurant-operating-permit-68",
+    "Guid": "37392ce4-88a0-4474-be10-f8a94e67f1e8",
+    "Name": "Operating Permit - Sunset Yokocho 68",
+    "Description": "A wall-mounted permit to serve food. Even ramen shops have paperwork.",
+    "File": "restaurant-operating-permit-68.png",
+    "Sha256": "F5F73C0C0E424A91F67E265422E5667B21020EBCD6ED2A221706923D6F8449BB",
+    "Crop": [
+      0,
+      0,
+      1055,
+      1491
+    ],
+    "Width": 0.224,
+    "Height": 0.312,
+    "Price": 2000,
+    "RecentPaper": true,
+    "FrameTint": [
+      1,
+      1,
+      1
+    ],
+    "Mount": "Wall",
+    "FrameStyle": "metal",
+    "BorderScale": 0.25
+  },
+  {
+    "Id": "culinary-school-1983",
+    "Guid": "03209f80-063f-47ba-9dd7-a7b698c58a7a",
+    "Name": "Culinary School Diploma",
+    "Description": "A culinary-school diploma in a handsome wall frame. Every cook starts somewhere.",
+    "File": "culinary-school-1983.png",
+    "Sha256": "F1614BE739C665676E29B3763872F99FE78319647F67AF699B8F1CA06C27C57B",
+    "Crop": [
+      0,
+      0,
+      1492,
+      1054
+    ],
+    "Width": 0.502,
+    "Height": 0.37,
+    "FrameTint": [
+      1,
+      1,
+      1
+    ],
+    "Mount": "Wall",
+    "FrameStyle": "walnut",
+    "BorderScale": 1,
+    "Gilt": true
+  },
+  {
+    "Id": "ramen-training-2008",
+    "Guid": "786f9b62-7eb8-49c6-be1c-2cc7b04617be",
+    "Name": "Ramen Training Certificate",
+    "Description": "A wall-hung certificate from a ramen workshop. There's always more to learn.",
+    "File": "ramen-training-2008.png",
+    "Sha256": "8C119CDE452D25E894376CA17361E73110FD788BF11FC1424127951D2376F95D",
+    "Crop": [
+      0,
+      0,
+      1145,
+      1374
+    ],
+    "Width": 0.292,
+    "Height": 0.345,
+    "FrameTint": [
+      1,
+      1,
+      1
+    ],
+    "RecentPaper": true,
+    "Mount": "Wall",
+    "FrameStyle": "oak",
+    "BorderScale": 0.55
+  },
+  {
+    "Id": "suzuki-ancestor-portrait",
+    "Guid": "77fe5187-a2ba-44bd-acbc-101d133eff16",
+    "Name": "Ancestor Portrait",
+    "Description": "An old portrait from generations past. A stern face to watch over the shop.",
+    "File": "suzuki-ancestor-portrait.png",
+    "Sha256": "BDE23F39C1C48376484A660AF2799A99FD780EFF8129B77040B1DC132307E78B",
+    "Crop": [
+      0,
+      0,
+      1086,
+      1448
+    ],
+    "Width": 0.224,
+    "Height": 0.29066667,
+    "Price": 10000,
+    "Mount": "Wall",
+    "FrameStyle": "walnut",
+    "BorderScale": 0.46666667
+  },
+  {
+    "Id": "suzuki-family-portrait-c1905",
+    "Guid": "da7f7202-2179-4ff4-a82d-a6470e79e6a8",
+    "Name": "Family Portrait",
+    "Description": "A formal portrait from another generation. A little family history for the wall.",
+    "File": "suzuki-family-portrait-c1905.png",
+    "Sha256": "9C4A658BB4E0761643BE1E5C030714FF6D1246008DEB3B55685D5E14591614A0",
+    "Crop": [
+      0,
+      0,
+      1122,
+      1402
+    ],
+    "Width": 0.224,
+    "Height": 0.27441396,
+    "Price": 10000,
+    "Mount": "Wall",
+    "FrameStyle": "walnut",
+    "BorderScale": 0.45
+  }
+]

@@ -15,6 +15,7 @@ internal sealed class DarkPlaqueSurface
     internal readonly Pixel Paint;
     private readonly Pixel[] _original, _gloss;
     private readonly byte _woodGloss, _paintGloss;
+    private readonly byte[] _paintGrain;
 
     internal DarkPlaqueSurface(Pixel[] original, Pixel[] gloss)
     {
@@ -33,6 +34,7 @@ internal sealed class DarkPlaqueSurface
         NativeWood = WoodStatistics.Measure(wood);
         Paint = new Pixel(Median(paint.Select(p => p.R)), Median(paint.Select(p => p.G)), Median(paint.Select(p => p.B)));
         _woodGloss = Median(woodGloss); _paintGloss = Median(paintGloss);
+        _paintGrain = paint.Select(p => p.G).ToArray();
     }
 
     internal (Pixel[] Albedo, Pixel[] Gloss) Compose(Pixel[] image, int width, int height, Artwork art)
@@ -88,6 +90,38 @@ internal sealed class DarkPlaqueSurface
     }
 
     internal static bool Inside(int x, int y) => X + x + .5f >= Left && X + x + .5f <= Right && Y + y + .5f >= Bottom && Y + y + .5f <= Top;
+
+    // Keep the approved drink strokes and palette, but compose them over the
+    // same material treatment as ramen. Paint wear affects only its own mask.
+    internal (Pixel[] Albedo, Pixel[] Gloss) ComposeDrink(Pixel[] face, Pixel[] paintMask, int width, int height,
+        Pixel[] grainSource, int grainWidth, int grainHeight, Artwork art, GrainImage? secondGrain = null)
+    {
+        if (width != 256 || height != 819 || face.Length != width * height || paintMask.Length != face.Length)
+            throw new InvalidDataException("Invalid dark drink face or paint mask.");
+        var next = (Pixel[])_original.Clone(); var gloss = (Pixel[])_gloss.Clone();
+        var wood = new DarkDrinkWood(grainSource, grainWidth, grainHeight, art, NativeWood, secondGrain);
+        var gold = new Pixel(191, 151, 79);
+        for (int y = 0; y < Height; y++) for (int x = 0; x < Width; x++)
+        {
+            if (!Inside(x, y)) continue;
+            int i = y * Width + x, source = (y - 9) * width + x - 8;
+            float u = (X + x + .5f - Left) / (Right - Left), v = (Y + y + .5f - Bottom) / (Top - Bottom);
+            var beneath = wood.Sample(u, v);
+            uint hash = unchecked((uint)(x * 73856093 ^ y * 19349663 ^ (art.DrinkPriority + 1) * 83492791));
+            byte pigment = _paintGrain[hash % (uint)_paintGrain.Length];
+            double wear = Math.Max(.75, Math.Min(1, .96 * pigment / Math.Max(1, (int)Paint.G)));
+            // Sparse worn flecks, stable per plaque and derived from the native
+            // paint sample, give the same dry pigment feel as the dish signs.
+            if ((hash >> 8) % 53 == 0) wear *= .65;
+            double a = paintMask[source].R / 255.0 * wear;
+            var paint = source % width >= width * .46 ? gold : Paint;
+            byte Mix(byte b, byte p) => (byte)Math.Round(b + (p - b) * a);
+            next[i] = new Pixel(Mix(beneath.R, paint.R), Mix(beneath.G, paint.G), Mix(beneath.B, paint.B), _original[i].A);
+            byte g = (byte)Math.Round(_woodGloss + (_paintGloss - _woodGloss) * a);
+            gloss[i] = new Pixel(g, g, g, _gloss[i].A);
+        }
+        return (next, gloss);
+    }
     internal static bool IsPaint(Pixel p) => Math.Min(p.R, Math.Min(p.G, p.B)) > 115
         && Math.Max(p.R, Math.Max(p.G, p.B)) - Math.Min(p.R, Math.Min(p.G, p.B)) < 28;
     private static byte Median(IEnumerable<byte> data) { var a = data.OrderBy(v => v).ToArray(); return a[a.Length / 2]; }

@@ -24,8 +24,16 @@ $taskExpected = @('README.md','BepInEx\plugins\PlaqueRamen\PlaqueRamen.dll')
 $taskExpected += @('Artwork.json','T_Tanzaku001_BASE.original.png','T_Tanzaku001_GLOSS.original.png','paper-beer\price-70.original.png','paper-beer\price-55.generated.png') | ForEach-Object { 'BepInEx\plugins\PlaqueRamen\assets\' + $_ }
 $taskCatalogue = Get-Content -LiteralPath (Join-Path $taskModule 'assets\Artwork.json') -Raw | ConvertFrom-Json
 $taskExpected += $taskCatalogue | ForEach-Object { 'BepInEx\plugins\PlaqueRamen\assets\art\' + $_.File }
+$taskExpected += $taskCatalogue | Where-Object Drink | ForEach-Object {
+    'BepInEx\plugins\PlaqueRamen\assets\art\' + $_.DarkFile
+    'BepInEx\plugins\PlaqueRamen\assets\art\' + $_.DarkMaskFile
+}
+$taskCertificates = Get-Content -LiteralPath (Join-Path $taskModule 'assets\Certificates.json') -Raw | ConvertFrom-Json
+$taskExpected += 'BepInEx\plugins\PlaqueRamen\assets\Certificates.json'
+$taskExpected += 'BepInEx\plugins\PlaqueRamen\assets\certificates\frame-wood.original.png'
+$taskExpected += $taskCertificates | ForEach-Object { 'BepInEx\plugins\PlaqueRamen\assets\certificates\' + $_.File }
 $taskFiles = @(Get-ChildItem -LiteralPath $taskStage -Recurse -File)
-if ($taskFiles.Count -ne 17 -or $taskExpected.Count -ne 17) { throw 'Unexpected files in the package stage.' }
+if ($taskFiles.Count -ne 34 -or $taskExpected.Count -ne 34 -or @($taskExpected | Sort-Object -Unique).Count -ne 34) { throw 'Unexpected files in the package stage.' }
 $taskPlan = @(foreach ($taskFile in $taskFiles) {
     $taskRelative = $taskFile.FullName.Substring($taskStage.Length + 1)
     if ($taskRelative -notin $taskExpected) { throw ('Unexpected package file: ' + $taskRelative) }

@@ -13,7 +13,7 @@ if ((Get-FileHash -LiteralPath (Join-Path $taskGame 'Ramen Shop Simulator_Data\M
 $taskStage = [IO.Path]::GetFullPath($taskBuild.Stage).TrimEnd('\')
 if (-not $taskStage.StartsWith($taskModule + '\dist\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Release stage is outside this mod.' }
 $taskPlan = @($taskBuild.Files | Where-Object { $_.Relative -ne 'README.md' })
-if ($taskPlan.Count -ne 16 -or @($taskPlan.Relative | Sort-Object -Unique).Count -ne 16) { throw 'Expected 16 distinct plugin files.' }
+if ($taskPlan.Count -ne 33 -or @($taskPlan.Relative | Sort-Object -Unique).Count -ne 33) { throw 'Expected 33 distinct plugin files.' }
 $taskReceiptPath = Join-Path $taskModule 'artifacts\installation-receipt.json'
 $taskPrevious = $null
 if (Test-Path -LiteralPath $taskReceiptPath) { $taskPrevious = Get-Content -LiteralPath $taskReceiptPath -Raw | ConvertFrom-Json }
@@ -103,4 +103,4 @@ foreach ($taskItem in $taskProtected) { if ((Get-FileHash -LiteralPath $taskItem
 foreach ($taskSave in $taskSaves) { if ((Get-FileHash -LiteralPath $taskSave.Original -Algorithm SHA256).Hash -ne $taskSave.SHA256) { throw 'Save changed during installation.' } }
 [ordered]@{ Version=$taskBuild.Version; InstalledUtc=[DateTime]::UtcNow.ToString('O'); GameRoot=$taskGame; Files=$taskPlan; Backup=$taskBackup; Saves=$taskSaves; Protected=$taskProtected; LegacyPrototypeRetired=[bool]$taskLegacy; AutomaticLoadLiveVerified=$false } |
     ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $taskReceiptPath -Encoding UTF8
-Write-Output ('Installed PlaqueRamen ' + $taskBuild.Version + ': 16 verified files; ' + $taskProtected.Count + ' protected files and ' + $taskSaves.Count + ' saves unchanged. Game remains closed.')
+Write-Output ('Installed PlaqueRamen ' + $taskBuild.Version + ': ' + $taskPlan.Count + ' verified files; ' + $taskProtected.Count + ' protected files and ' + $taskSaves.Count + ' saves unchanged. Game remains closed.')
