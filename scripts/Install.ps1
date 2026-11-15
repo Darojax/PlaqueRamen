@@ -5,6 +5,21 @@ $taskModule = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $taskGame = (Resolve-Path -LiteralPath $GameRoot).Path.TrimEnd('\')
 $taskTargetRoot = [IO.Path]::GetFullPath((Join-Path $taskGame 'BepInEx\plugins\PlaqueRamen'))
 $taskLegacyRoot = [IO.Path]::GetFullPath((Join-Path $taskGame 'BepInEx\plugins\MenuPlaqueSync'))
+function Assert-PlainPathInRoot([string]$TaskPath, [string]$TaskRoot) {
+    $taskResolvedRoot = [IO.Path]::GetFullPath($TaskRoot).TrimEnd('\')
+    $taskResolvedPath = [IO.Path]::GetFullPath($TaskPath)
+    if (-not $taskResolvedPath.StartsWith($taskResolvedRoot + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'A deployment path escaped its folder.' }
+    # Reject junctions/symlinks inside the mod folder before copying or retiring files.
+    $taskCheckPath = $taskResolvedPath
+    while ($taskCheckPath.Length -ge $taskResolvedRoot.Length) {
+        if (Test-Path -LiteralPath $taskCheckPath) {
+            $taskCheckItem = Get-Item -LiteralPath $taskCheckPath -Force
+            if (($taskCheckItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw ('Reparse path retained: ' + $taskCheckPath) }
+        }
+        if ($taskCheckPath -eq $taskResolvedRoot) { break }
+        $taskCheckPath = Split-Path -Parent $taskCheckPath
+    }
+}
 if (Get-Process -Name 'Ramen Shop Simulator' -ErrorAction SilentlyContinue) { throw 'Save and close the game before installing PlaqueRamen.' }
 if (-not (Test-Path -LiteralPath (Join-Path $taskGame 'BepInEx\core\BepInEx.dll'))) { throw 'Install BepInEx 5 Windows x64 first.' }
 if (Get-ChildItem -LiteralPath (Join-Path $taskGame 'BepInEx\plugins') -Filter 'RamenSigns.dll' -Recurse -File) { throw 'Remove the old RamenSigns trial before installing.' }
@@ -13,25 +28,62 @@ if ((Get-FileHash -LiteralPath (Join-Path $taskGame 'Ramen Shop Simulator_Data\M
 $taskStage = [IO.Path]::GetFullPath($taskBuild.Stage).TrimEnd('\')
 if (-not $taskStage.StartsWith($taskModule + '\dist\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Release stage is outside this mod.' }
 $taskPlan = @($taskBuild.Files | Where-Object { $_.Relative -ne 'README.md' })
-if ($taskPlan.Count -ne 33 -or @($taskPlan.Relative | Sort-Object -Unique).Count -ne 33) { throw 'Expected 33 distinct plugin files.' }
+if ($taskPlan.Count -ne 59 -or @($taskPlan.Relative | Sort-Object -Unique).Count -ne 59) { throw 'Expected 59 distinct plugin files.' }
+$taskPreparedManifest = [IO.Path]::GetFullPath((Join-Path $taskTargetRoot 'assets\certificates\prepared\PreparedCertificates.json'))
 $taskReceiptPath = Join-Path $taskModule 'artifacts\installation-receipt.json'
 $taskPrevious = $null
 if (Test-Path -LiteralPath $taskReceiptPath) { $taskPrevious = Get-Content -LiteralPath $taskReceiptPath -Raw | ConvertFrom-Json }
 if ($taskPrevious -and $taskPrevious.GameRoot -ne $taskGame) { throw 'Installation receipt belongs to another game folder.' }
+$taskPreviousByPath = @{}
+if ($taskPrevious) {
+    foreach ($taskItem in @($taskPrevious.Files)) {
+        if (-not $taskItem.Relative -or [IO.Path]::IsPathRooted($taskItem.Relative)) { throw 'Invalid previous installation path.' }
+        $taskTarget = [IO.Path]::GetFullPath((Join-Path $taskGame $taskItem.Relative))
+        Assert-PlainPathInRoot $taskTarget $taskTargetRoot
+        if ($taskPreviousByPath.ContainsKey($taskTarget)) { throw 'Previous installation receipt has duplicate target paths.' }
+        $taskPreviousByPath[$taskTarget] = $taskItem
+    }
+}
+$taskPlanByPath = @{}
 foreach ($taskItem in $taskPlan) {
+    if (-not $taskItem.Relative -or [IO.Path]::IsPathRooted($taskItem.Relative)) { throw 'Invalid staged installation path.' }
     $taskSource = [IO.Path]::GetFullPath((Join-Path $taskStage $taskItem.Relative))
     $taskTarget = [IO.Path]::GetFullPath((Join-Path $taskGame $taskItem.Relative))
     if (-not $taskSource.StartsWith($taskStage + '\', [StringComparison]::OrdinalIgnoreCase) -or -not $taskTarget.StartsWith($taskTargetRoot + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'A deployment path escaped its folder.' }
+    Assert-PlainPathInRoot $taskTarget $taskTargetRoot
+    if ($taskPlanByPath.ContainsKey($taskTarget)) { throw 'Release stage has duplicate target paths.' }
+    $taskPlanByPath[$taskTarget] = $taskItem
     if ((Get-FileHash -LiteralPath $taskSource -Algorithm SHA256).Hash -ne $taskItem.SHA256) { throw ('Staged file changed: ' + $taskItem.Relative) }
     if (Test-Path -LiteralPath $taskTarget) {
         $taskHash = (Get-FileHash -LiteralPath $taskTarget -Algorithm SHA256).Hash
-        $taskOwned = @($taskPrevious.Files | Where-Object { $_.Relative -eq $taskItem.Relative -and $_.SHA256 -eq $taskHash })
-        if ($taskHash -ne $taskItem.SHA256 -and $taskOwned.Count -ne 1) { throw ('Unrecognised existing file retained: ' + $taskTarget) }
+        $taskOwned = $taskPreviousByPath.ContainsKey($taskTarget) -and $taskPreviousByPath[$taskTarget].SHA256 -eq $taskHash
+        if ($taskHash -ne $taskItem.SHA256 -and -not $taskOwned) { throw ('Unrecognised existing file retained: ' + $taskTarget) }
     }
+}
+if (-not $taskPlanByPath.ContainsKey($taskPreparedManifest)) { throw 'PreparedCertificates.json is required in the prepared certificate folder.' }
+$taskStagedPluginRoot = Join-Path $taskStage 'BepInEx\plugins\PlaqueRamen'
+$taskStagedPluginFiles = @(Get-ChildItem -LiteralPath $taskStagedPluginRoot -Recurse -File)
+if ($taskStagedPluginFiles.Count -ne 59) { throw 'Expected exactly 59 files in the staged plugin folder.' }
+foreach ($taskFile in $taskStagedPluginFiles) {
+    $taskRelative = $taskFile.FullName.Substring($taskStage.Length + 1)
+    $taskTarget = [IO.Path]::GetFullPath((Join-Path $taskGame $taskRelative))
+    if (-not $taskPlanByPath.ContainsKey($taskTarget)) { throw ('Unlisted staged file retained: ' + $taskFile.FullName) }
+}
+$taskRetired = @()
+$taskRetiredByPath = @{}
+foreach ($taskTarget in $taskPreviousByPath.Keys) {
+    if ($taskPlanByPath.ContainsKey($taskTarget) -or -not (Test-Path -LiteralPath $taskTarget)) { continue }
+    Assert-PlainPathInRoot $taskTarget $taskTargetRoot
+    if (-not (Test-Path -LiteralPath $taskTarget -PathType Leaf)) { throw ('Previous file is now a directory; retained: ' + $taskTarget) }
+    $taskPreviousItem = $taskPreviousByPath[$taskTarget]
+    if ((Get-FileHash -LiteralPath $taskTarget -Algorithm SHA256).Hash -ne $taskPreviousItem.SHA256) { throw ('Changed obsolete file retained: ' + $taskTarget) }
+    $taskItem = [pscustomobject]@{ Relative=$taskTarget.Substring($taskGame.Length + 1); Bytes=(Get-Item -LiteralPath $taskTarget).Length; SHA256=$taskPreviousItem.SHA256 }
+    $taskRetired += $taskItem
+    $taskRetiredByPath[$taskTarget] = $taskItem
 }
 if (Test-Path -LiteralPath $taskTargetRoot) {
     foreach ($taskExisting in Get-ChildItem -LiteralPath $taskTargetRoot -Recurse -File) {
-        if ($taskPlan.Relative -notcontains $taskExisting.FullName.Substring($taskGame.Length+1)) { throw ('Unexpected file retained: ' + $taskExisting.FullName) }
+        if (-not $taskPlanByPath.ContainsKey($taskExisting.FullName) -and -not $taskRetiredByPath.ContainsKey($taskExisting.FullName)) { throw ('Unexpected file retained: ' + $taskExisting.FullName) }
     }
 }
 $taskLegacy = $null
@@ -68,13 +120,14 @@ foreach ($taskName in @('SaveFile.es3','SaveFile.es3.bac')) {
     if ((Get-FileHash -LiteralPath $taskCopy -Algorithm SHA256).Hash -ne $taskHash -or (Get-FileHash -LiteralPath $taskPath -Algorithm SHA256).Hash -ne $taskHash) { throw 'Save changed during backup.' }
     $taskSaves += [pscustomobject]@{ Original=$taskPath; Backup=$taskCopy; SHA256=$taskHash }
 }
-$taskBackupFiles = @($taskPlan)
+$taskBackupFiles = @($taskPlan) + @($taskRetired)
 if ($taskLegacy) { $taskBackupFiles += @($taskLegacy.Files); Copy-Item -LiteralPath $LegacyReceiptPath -Destination (Join-Path $taskBackup 'legacy-receipt.json') }
 if (Test-Path -LiteralPath $taskReceiptPath) { Copy-Item -LiteralPath $taskReceiptPath -Destination (Join-Path $taskBackup 'previous-receipt.json') }
 foreach ($taskItem in $taskBackupFiles) {
-    $taskTarget = Join-Path $taskGame $taskItem.Relative
+    $taskTarget = [IO.Path]::GetFullPath((Join-Path $taskGame $taskItem.Relative))
     if (Test-Path -LiteralPath $taskTarget) {
-        $taskCopy = Join-Path $taskBackup $taskItem.Relative
+        $taskCopy = [IO.Path]::GetFullPath((Join-Path $taskBackup $taskItem.Relative))
+        if (-not $taskCopy.StartsWith($taskBackup + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'A backup path escaped its folder.' }
         New-Item -ItemType Directory -Path (Split-Path -Parent $taskCopy) -Force | Out-Null
         Copy-Item -LiteralPath $taskTarget -Destination $taskCopy
         if ((Get-FileHash -LiteralPath $taskTarget -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $taskCopy -Algorithm SHA256).Hash) { throw 'Previous plugin backup did not verify.' }
@@ -86,6 +139,17 @@ foreach ($taskItem in $taskPlan) {
     New-Item -ItemType Directory -Path (Split-Path -Parent $taskTarget) -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $taskStage $taskItem.Relative) -Destination $taskTarget -Force
     if ((Get-FileHash -LiteralPath $taskTarget -Algorithm SHA256).Hash -ne $taskItem.SHA256) { throw 'Installed file did not verify.' }
+}
+if (Get-Process -Name 'Ramen Shop Simulator' -ErrorAction SilentlyContinue) { throw 'Game started before retirement; obsolete files retained.' }
+foreach ($taskItem in $taskRetired) {
+    $taskTarget = [IO.Path]::GetFullPath((Join-Path $taskGame $taskItem.Relative))
+    $taskCopy = [IO.Path]::GetFullPath((Join-Path $taskBackup $taskItem.Relative))
+    Assert-PlainPathInRoot $taskTarget $taskTargetRoot
+    if (-not $taskPreviousByPath.ContainsKey($taskTarget) -or $taskPlanByPath.ContainsKey($taskTarget) -or
+        -not $taskCopy.StartsWith($taskBackup + '\', [StringComparison]::OrdinalIgnoreCase) -or
+        (Get-FileHash -LiteralPath $taskCopy -Algorithm SHA256).Hash -ne $taskItem.SHA256 -or
+        (Get-FileHash -LiteralPath $taskTarget -Algorithm SHA256).Hash -ne $taskItem.SHA256) { throw 'Obsolete file changed before retirement; retained.' }
+    Remove-Item -LiteralPath $taskTarget
 }
 if ($taskLegacy) {
     foreach ($taskItem in $taskLegacy.Files) {
@@ -101,6 +165,6 @@ if ($taskLegacy) {
 }
 foreach ($taskItem in $taskProtected) { if ((Get-FileHash -LiteralPath $taskItem.Path -Algorithm SHA256).Hash -ne $taskItem.SHA256) { throw ('Protected file changed: ' + $taskItem.Path) } }
 foreach ($taskSave in $taskSaves) { if ((Get-FileHash -LiteralPath $taskSave.Original -Algorithm SHA256).Hash -ne $taskSave.SHA256) { throw 'Save changed during installation.' } }
-[ordered]@{ Version=$taskBuild.Version; InstalledUtc=[DateTime]::UtcNow.ToString('O'); GameRoot=$taskGame; Files=$taskPlan; Backup=$taskBackup; Saves=$taskSaves; Protected=$taskProtected; LegacyPrototypeRetired=[bool]$taskLegacy; AutomaticLoadLiveVerified=$false } |
+[ordered]@{ Version=$taskBuild.Version; InstalledUtc=[DateTime]::UtcNow.ToString('O'); GameRoot=$taskGame; Files=$taskPlan; RetiredFiles=@($taskRetired); Backup=$taskBackup; Saves=$taskSaves; Protected=$taskProtected; LegacyPrototypeRetired=[bool]$taskLegacy; AutomaticLoadLiveVerified=$false } |
     ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $taskReceiptPath -Encoding UTF8
-Write-Output ('Installed PlaqueRamen ' + $taskBuild.Version + ': ' + $taskPlan.Count + ' verified files; ' + $taskProtected.Count + ' protected files and ' + $taskSaves.Count + ' saves unchanged. Game remains closed.')
+Write-Output ('Installed PlaqueRamen ' + $taskBuild.Version + ': ' + $taskPlan.Count + ' verified files; ' + $taskRetired.Count + ' obsolete owned files retired after backup; ' + $taskProtected.Count + ' protected files and ' + $taskSaves.Count + ' saves unchanged. Game remains closed.')

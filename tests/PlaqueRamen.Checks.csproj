@@ -8,5 +8,6 @@
   <ItemGroup>
     <Compile Include="..\src\*.cs" Exclude="..\src\Plugin.cs;..\src\HolderBinding.cs;..\src\PlaqueTextures.cs;..\src\PaperBeerPriceFix.cs;..\src\LiveBoardCatalog.cs;..\src\CertificateCatalog.cs;..\src\LiveBoardDividers.cs;..\src\StartupBadge.cs" Link="%(Filename)%(Extension)" />
     <Reference Include="Mono.Cecil" HintPath="$(LoaderCore)\Mono.Cecil.dll" Private="true" />
+    <Compile Include="..\tools\CertificateAssetCompiler\PngCodec.cs" Link="PngCodec.cs" />
   </ItemGroup>
 </Project>

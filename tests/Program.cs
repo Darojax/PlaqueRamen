@@ -298,6 +298,17 @@ DrinkChecks.Run(root, arts, Check, Refuses);
 CertificateChecks.Run(root, Check, Refuses);
 CertificateFinishChecks.Run(root,Check,Refuses);
 CertificateIconChecks.Run(Check,Refuses);
+CertificateRasterChecks.Run(Check,Refuses);
+PreparedCertificateChecks.Run(root,Check,Refuses);
+
+var certificateRuntime=Types(dll.MainModule.Types).Single(t=>t.FullName=="PlaqueRamen.CertificateCatalog");
+Check(!certificateRuntime.Methods.Where(m=>m.HasBody).SelectMany(m=>m.Body.Instructions).Any(i=>i.Operand is MethodReference m
+    && (m.DeclaringType.FullName is "PlaqueRamen.CertificatePaper" or "PlaqueRamen.CertificateFrameFinish" or "PlaqueRamen.CertificateIcon"
+        || (m.DeclaringType.FullName=="UnityEngine.Texture2D" && m.Name is "GetPixels32" or "SetPixels32"))),
+    "framed artwork loads prepared textures without full-source pixel extraction, runtime crops, resampling or procedural finishes");
+var preparedLoader=certificateRuntime.Methods.Single(m=>m.Name=="LoadPrepared");
+Check(preparedLoader.Body.Instructions.Any(i=>i.Operand is MethodReference m&&m.DeclaringType.FullName=="UnityEngine.ImageConversion"&&m.Name=="LoadImage"),
+    "prepared textures use the game image loader while retaining the native lit materials");
 
 PaperPriceChecks.Run(Check, Refuses);
 if (args.Contains("--render-dark")) DarkPreview.Run(root, arts.Where(a => !a.Drink).ToArray(), Check);

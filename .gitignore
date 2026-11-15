@@ -28,3 +28,7 @@
 !/scripts/Build.ps1
 !/scripts/Setup-Tools.ps1
 !/scripts/Install.ps1
+!/tools/
+!/tools/CertificateAssetCompiler/
+!/tools/CertificateAssetCompiler/*.cs
+!/tools/CertificateAssetCompiler/*.csproj

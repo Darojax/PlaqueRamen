@@ -6,6 +6,9 @@ $taskGame = (Resolve-Path -LiteralPath $GameRoot).Path.TrimEnd('\')
 $taskNative = Join-Path $taskGame 'Ramen Shop Simulator_Data\Managed\Assembly-CSharp.dll'
 if (-not (Test-Path -LiteralPath $taskNative)) { throw 'GameRoot must contain the installed Ramen Shop Simulator.' }
 & (Join-Path $PSScriptRoot 'Setup-Tools.ps1')
+$taskPrepared = Join-Path $taskModule 'artifacts\prepared-certificates'
+& dotnet run --project (Join-Path $taskModule 'tools\CertificateAssetCompiler\CertificateAssetCompiler.csproj') -c Release -- $taskModule $taskPrepared
+if ($LASTEXITCODE -ne 0) { throw 'Framed artwork preparation failed.' }
 & dotnet build (Join-Path $taskModule 'src\PlaqueRamen.csproj') -c Release --nologo --verbosity quiet "-p:GameRoot=$taskGame"
 if ($LASTEXITCODE -ne 0) { throw 'PlaqueRamen build failed.' }
 $taskChecks = @(& dotnet run --project (Join-Path $taskModule 'tests\PlaqueRamen.Checks.csproj') -c Release -- $taskGame)
@@ -18,7 +21,6 @@ $taskStage = Join-Path $taskModule ('dist\PlaqueRamen-' + $taskVersion)
 $taskPlugin = Join-Path $taskStage 'BepInEx\plugins\PlaqueRamen'
 New-Item -ItemType Directory -Path $taskPlugin -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $taskModule 'src\bin\Release\netstandard2.1\PlaqueRamen.dll') -Destination $taskPlugin -Force
-Copy-Item -LiteralPath (Join-Path $taskModule 'assets') -Destination $taskPlugin -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $taskModule 'README.md') -Destination $taskStage -Force
 $taskExpected = @('README.md','BepInEx\plugins\PlaqueRamen\PlaqueRamen.dll')
 $taskExpected += @('Artwork.json','T_Tanzaku001_BASE.original.png','T_Tanzaku001_GLOSS.original.png','paper-beer\price-70.original.png','paper-beer\price-55.generated.png') | ForEach-Object { 'BepInEx\plugins\PlaqueRamen\assets\' + $_ }
@@ -31,9 +33,25 @@ $taskExpected += $taskCatalogue | Where-Object Drink | ForEach-Object {
 $taskCertificates = Get-Content -LiteralPath (Join-Path $taskModule 'assets\Certificates.json') -Raw | ConvertFrom-Json
 $taskExpected += 'BepInEx\plugins\PlaqueRamen\assets\Certificates.json'
 $taskExpected += 'BepInEx\plugins\PlaqueRamen\assets\certificates\frame-wood.original.png'
-$taskExpected += $taskCertificates | ForEach-Object { 'BepInEx\plugins\PlaqueRamen\assets\certificates\' + $_.File }
+$taskPreparedManifest = Get-Content -LiteralPath (Join-Path $taskPrepared 'PreparedCertificates.json') -Raw | ConvertFrom-Json
+$taskExpected += 'BepInEx\plugins\PlaqueRamen\assets\certificates\prepared\PreparedCertificates.json'
+foreach ($taskCertificate in $taskPreparedManifest.Items) {
+    foreach ($taskKind in @('Paper','Gloss','Icon','Frame')) {
+        $taskTexture = $taskCertificate.$taskKind
+        if ($taskTexture) { $taskExpected += 'BepInEx\plugins\PlaqueRamen\assets\certificates\prepared\' + $taskTexture.File }
+    }
+}
+foreach ($taskRelative in $taskExpected | Where-Object { $_.StartsWith('BepInEx\plugins\PlaqueRamen\assets\') }) {
+    $taskAsset = $taskRelative.Substring('BepInEx\plugins\PlaqueRamen\assets\'.Length)
+    if ($taskAsset.StartsWith('certificates\prepared\')) {
+        $taskSource = Join-Path $taskPrepared $taskAsset.Substring('certificates\prepared\'.Length)
+    } else { $taskSource = Join-Path (Join-Path $taskModule 'assets') $taskAsset }
+    $taskDestination = Join-Path $taskStage $taskRelative
+    New-Item -ItemType Directory -Path (Split-Path -Parent $taskDestination) -Force | Out-Null
+    Copy-Item -LiteralPath $taskSource -Destination $taskDestination -Force
+}
 $taskFiles = @(Get-ChildItem -LiteralPath $taskStage -Recurse -File)
-if ($taskFiles.Count -ne 34 -or $taskExpected.Count -ne 34 -or @($taskExpected | Sort-Object -Unique).Count -ne 34) { throw 'Unexpected files in the package stage.' }
+if ($taskFiles.Count -ne 60 -or $taskExpected.Count -ne 60 -or @($taskExpected | Sort-Object -Unique).Count -ne 60) { throw 'Unexpected files in the package stage.' }
 $taskPlan = @(foreach ($taskFile in $taskFiles) {
     $taskRelative = $taskFile.FullName.Substring($taskStage.Length + 1)
     if ($taskRelative -notin $taskExpected) { throw ('Unexpected package file: ' + $taskRelative) }

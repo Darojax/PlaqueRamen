@@ -20,6 +20,8 @@ internal sealed class CertificateCatalog : IDisposable
 {
     private readonly CertificateArt[] _art;
     private readonly string _folder;
+    private readonly string _preparedFolder;
+    private readonly Dictionary<string,PreparedCertificate> _prepared;
     private readonly Action<string> _log;
     private readonly GameObject _templates;
     private readonly List<(SavableObject Root,SavableVariant Variant)> _added=new();
@@ -30,7 +32,6 @@ internal sealed class CertificateCatalog : IDisposable
     private readonly Dictionary<string,string> _texts=new(StringComparer.Ordinal);
     private Metadata? _originalMetadata;
     private MainInteractableInfo? _nativeInfo;
-    private Pixel[]? _frameBase;
     private Mesh? _emptySupport;
     private readonly Dictionary<MeshFilter,(Mesh Mesh,Material[] Materials)> _supports=new();
     private readonly Dictionary<Decoration,(PlacementType Type,bool Rigid)> _mounts=new();
@@ -76,8 +77,9 @@ internal sealed class CertificateCatalog : IDisposable
 
     internal CertificateCatalog(Transform owner,string folder,Action<string> log)
     {
-        _folder=Path.Combine(folder,"certificates");_log=log;
-        _art=JsonConvert.DeserializeObject<CertificateArt[]>(File.ReadAllText(Path.Combine(folder,"Certificates.json")))
+        _folder=Path.Combine(folder,"certificates");_preparedFolder=Path.Combine(_folder,"prepared");_log=log;
+        string catalogPath=Path.Combine(folder,"Certificates.json");
+        _art=JsonConvert.DeserializeObject<CertificateArt[]>(File.ReadAllText(catalogPath))
             ??throw new InvalidDataException("Missing certificate definitions.");
         if(_art.Length!=9 || _art.Select(a=>a.Guid).Distinct().Count()!=9
             || _art[0].Guid!=CertificateLayout.NativeGuid || _art[1].Guid!=CertificateLayout.HygieneGuid || _art[2].Guid!=CertificateLayout.CommunityGuid
@@ -87,10 +89,18 @@ internal sealed class CertificateCatalog : IDisposable
             throw new InvalidDataException("Certificate identities changed.");
         foreach(var art in _art)
         {
-            art.Validate();using var sha=SHA256.Create();
-            string hash=BitConverter.ToString(sha.ComputeHash(File.ReadAllBytes(Path.Combine(_folder,art.File)))).Replace("-","");
-            if(!hash.Equals(art.Sha256,StringComparison.OrdinalIgnoreCase))throw new InvalidDataException("Certificate artwork changed: "+art.File);
+            art.Validate();
             _texts.Add(TextKey(art,true),art.Name);_texts.Add(TextKey(art,false),art.Description);
+        }
+        var prepared=JsonConvert.DeserializeObject<CertificatePreparedCatalog>(File.ReadAllText(Path.Combine(_preparedFolder,"PreparedCertificates.json")))
+            ??throw new InvalidDataException("Prepared certificate textures are missing.");
+        using(var sha=SHA256.Create())prepared.Validate(_art,BitConverter.ToString(sha.ComputeHash(File.ReadAllBytes(catalogPath))).Replace("-",""));
+        _prepared=prepared.Items.ToDictionary(p=>p.Id,StringComparer.Ordinal);
+        foreach(var texture in prepared.Items.SelectMany(p=>p.Textures))
+        {
+            using var sha=SHA256.Create();using var stream=File.OpenRead(Path.Combine(_preparedFolder,texture.File));
+            string hash=BitConverter.ToString(sha.ComputeHash(stream)).Replace("-","");
+            if(!hash.Equals(texture.Sha256,StringComparison.OrdinalIgnoreCase))throw new InvalidDataException("Prepared certificate texture changed: "+texture.File);
         }
         if(_art[0].Width!=0 || _art[0].Height!=0 || _art[0].Mount!="Native" || _art[0].FrameStyle!="native" || _art[0].BorderScale!=1 || _art[0].Gilt
             || !_art[0].FrameTint.SequenceEqual(new float[]{1,1,1}))
@@ -227,20 +237,15 @@ internal sealed class CertificateCatalog : IDisposable
     private Surface CreateSurface(Mesh original,Material[] materials,CertificateShape shape,CertificateArt art)
     {
         var material=materials[0];
-        var surface=new Surface();Texture2D? input=null;
+        var surface=new Surface();
         try
         {
-            input=new Texture2D(2,2,TextureFormat.RGBA32,false,false);
-            if(!ImageConversion.LoadImage(input,File.ReadAllBytes(Path.Combine(_folder,art.File)),false))throw new InvalidDataException("Could not decode "+art.File);
-            var fit=CertificatePaper.Fit(input.GetPixels32().Select(p=>new Pixel(p.r,p.g,p.b,p.a)).ToArray(),input.width,input.height,art.Crop,shape.PaperAspect);
-            surface.Texture=new Texture2D(fit.Width,fit.Height,TextureFormat.RGBA32,true,false){name="PlaqueRamen_"+art.Id,wrapMode=TextureWrapMode.Clamp,filterMode=FilterMode.Trilinear,anisoLevel=4};
-            surface.Texture.SetPixels32(fit.Pixels.Select(p=>new Color32(p.R,p.G,p.B,p.A)).ToArray());surface.Texture.Apply(true,true);
+            var prepared=_prepared[art.Id];
+            if(Math.Abs(prepared.PaperAspect-shape.PaperAspect)>.00001f)throw new InvalidDataException("Prepared paper aspect does not match its frame: "+art.Id);
+            surface.Texture=LoadPrepared(prepared.Paper,"PlaqueRamen_"+art.Id,FilterMode.Trilinear,4);
             if(art.Width!=0)
             {
-                var icon=CertificateIcon.Compose(fit.Pixels,fit.Width,fit.Height);
-                surface.IconTexture=new Texture2D(CertificateIcon.Size,CertificateIcon.Size,TextureFormat.RGBA32,true,false)
-                    {name="PlaqueRamen_"+art.Id+"_InventoryIcon",wrapMode=TextureWrapMode.Clamp,filterMode=FilterMode.Trilinear};
-                surface.IconTexture.SetPixels32(icon.Select(p=>new Color32(p.R,p.G,p.B,p.A)).ToArray());surface.IconTexture.Apply(true,true);
+                surface.IconTexture=LoadPrepared(prepared.Icon!,"PlaqueRamen_"+art.Id+"_InventoryIcon",FilterMode.Trilinear);
                 surface.Icon=Sprite.Create(surface.IconTexture,new Rect(0,0,CertificateIcon.Size,CertificateIcon.Size),new Vector2(.5f,.5f),100,0,SpriteMeshType.FullRect);
             }
             surface.Mesh=UnityEngine.Object.Instantiate(original);surface.Mesh.name="PlaqueRamen_"+art.Id;
@@ -257,20 +262,7 @@ internal sealed class CertificateCatalog : IDisposable
             surface.OwnsFrame=art.Width!=0;surface.Frame=surface.OwnsFrame?new Material(material):material;
             if(surface.OwnsFrame)
             {
-                if(_frameBase==null)
-                {
-                    var wood=new Texture2D(2,2,TextureFormat.RGBA32,false,false);
-                    try
-                    {
-                        if(!ImageConversion.LoadImage(wood,File.ReadAllBytes(Path.Combine(_folder,CertificateFrameFinish.SourceFile)),false) || wood.width!=512 || wood.height!=512)
-                            throw new InvalidDataException("Native frame atlas dimensions changed.");
-                        _frameBase=wood.GetPixels32().Select(p=>new Pixel(p.r,p.g,p.b,p.a)).ToArray();
-                    }
-                    finally{UnityEngine.Object.Destroy(wood);}
-                }
-                var finish=CertificateFrameFinish.Compose(_frameBase,512,512,art,shape);
-                surface.FrameTexture=new Texture2D(512,512,TextureFormat.RGBA32,true,false){name="PlaqueRamen_"+art.Id+"_Frame",wrapMode=TextureWrapMode.Clamp};
-                surface.FrameTexture.SetPixels32(finish.Select(p=>new Color32(p.R,p.G,p.B,p.A)).ToArray());surface.FrameTexture.Apply(true,true);
+                surface.FrameTexture=LoadPrepared(prepared.Frame!,"PlaqueRamen_"+art.Id+"_Frame",FilterMode.Bilinear);
                 surface.Frame.SetTexture("_MainTex",surface.FrameTexture);
                 if(art.FrameStyle=="metal")
                 {surface.Frame.DisableKeyword("N_F_NM_ON");surface.Frame.SetTexture("_NormalMap",null);surface.Frame.SetTexture("_MaskGloss",Texture2D.grayTexture);}
@@ -281,12 +273,7 @@ internal sealed class CertificateCatalog : IDisposable
             // Remapped paper UVs must not sample the old atlas's frame normals
             // or its old printed letters in the gloss mask.
             surface.Paper.DisableKeyword("N_F_NM_ON");surface.Paper.SetTexture("_NormalMap",null);
-            int glossWidth=512,glossHeight=(int)Math.Round(512/shape.PaperAspect);
-            int seed=art.Id.Aggregate(17,(value,c)=>unchecked(value*31+c));
-            surface.Gloss=new Texture2D(glossWidth,glossHeight,TextureFormat.RGBA32,true,false)
-                {name="PlaqueRamen_"+art.Id+"_PaperFinish",wrapMode=TextureWrapMode.Clamp,filterMode=FilterMode.Trilinear};
-            surface.Gloss.SetPixels32(CertificatePaper.StockGloss(glossWidth,glossHeight,seed,art.RecentPaper)
-                .Select(p=>new Color32(p.R,p.G,p.B,p.A)).ToArray());surface.Gloss.Apply(true,true);
+            surface.Gloss=LoadPrepared(prepared.Gloss,"PlaqueRamen_"+art.Id+"_PaperFinish",FilterMode.Trilinear);
             surface.Paper.SetTexture("_MaskGloss",surface.Gloss);
             if(art.IsPhotograph)
             {
@@ -308,12 +295,27 @@ internal sealed class CertificateCatalog : IDisposable
                 surface.Paper.SetFloat("_NormalScale",0f);
                 _log(art.Name+": native lit print; ambient="+nativeAmbient+" -> "+surface.Paper.GetFloat("_EnvironmentalLightingIntensity")
                     +"; colour power="+surface.Paper.GetFloat("_MaiColPo")+"; normal strength="+surface.Paper.GetFloat("_NormalScale")
-                    +"; native frame, shadows and source pixels retained.");
+                    +"; native frame and shadows retained; prepared print texture loaded.");
             }
             return surface;
         }
         catch {Destroy(surface);throw;}
-        finally {if(input)UnityEngine.Object.Destroy(input);}
+    }
+
+    private Texture2D LoadPrepared(PreparedTexture prepared,string name,FilterMode filter,int anisotropy=1)
+    {
+        var texture=new Texture2D(2,2,TextureFormat.RGBA32,true,false)
+            {name=name,wrapMode=TextureWrapMode.Clamp,filterMode=filter,anisoLevel=anisotropy};
+        try
+        {
+            // PNG decode uploads directly; no source-sized CPU arrays, crops,
+            // inventory resampling or procedural finishes are built in-game.
+            if(!ImageConversion.LoadImage(texture,File.ReadAllBytes(Path.Combine(_preparedFolder,prepared.File)),true)
+                || texture.width!=prepared.Width || texture.height!=prepared.Height)
+                throw new InvalidDataException("Prepared certificate texture could not be loaded: "+prepared.File);
+            return texture;
+        }
+        catch {UnityEngine.Object.Destroy(texture);throw;}
     }
 
     private void StyleSupport(GameObject prefab,CertificateArt art,Surface surface)
@@ -406,7 +408,7 @@ internal sealed class CertificateCatalog : IDisposable
         _bindings.Clear();foreach(var entry in _added)entry.Root.Variants.Remove(entry.Variant);_added.Clear();_unlockAliases.Clear();
         RestoreSupports();foreach(var entry in _mounts)if(entry.Key){entry.Key.placementType=entry.Value.Type;entry.Key.SetRBOffOnPlace=entry.Value.Rigid;}_mounts.Clear();
         foreach(var surface in _surfaces.Values)Destroy(surface);_surfaces.Clear();
-        if(_emptySupport)UnityEngine.Object.Destroy(_emptySupport);_frameBase=null;
+        if(_emptySupport)UnityEngine.Object.Destroy(_emptySupport);
         if(_templates)UnityEngine.Object.Destroy(_templates);
     }
     private static void Restore(Binding binding)

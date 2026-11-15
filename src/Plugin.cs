@@ -25,7 +25,7 @@ namespace PlaqueRamen;
 [BepInDependency(StartupBadge.RadioId, BepInDependency.DependencyFlags.SoftDependency)]
 public sealed class Plugin : BaseUnityPlugin
 {
-    public const string Id = "com.darojax.ramenshop.plaqueramen", Version = "0.3.7";
+    public const string Id = "com.darojax.ramenshop.plaqueramen", Version = "0.3.8";
     internal static Plugin? Instance;
     private readonly Dictionary<ViewController_Kenbaiki, RuntimeEnvironment_Kenbaiki> _menus = new();
     private readonly Dictionary<MeshFilter, HolderBinding> _holders = new();
@@ -54,6 +54,7 @@ public sealed class Plugin : BaseUnityPlugin
 
     private void Awake()
     {
+        var startupTimer=System.Diagnostics.Stopwatch.StartNew();
         Instance = this;
         try
         {
@@ -87,9 +88,12 @@ public sealed class Plugin : BaseUnityPlugin
             _catalog = new LiveBoardCatalog(transform, _holder, _seven, text => Logger.LogInfo(text));
             try { _certificates = new CertificateCatalog(transform, _folder, text => Logger.LogInfo(text)); }
             catch (Exception ex) { _certificateError = ex.Message; Logger.LogWarning("Certificate additions unavailable: " + ex.Message); }
+            Logger.LogInfo("Startup compatibility and asset checks: "+startupTimer.ElapsedMilliseconds+" ms.");
             _harmony = new Harmony(Id); _harmony.PatchAll(GetType().Assembly);
             if (_harmony.GetPatchedMethods().Count() != 11) throw new InvalidOperationException("All eleven menu, item, description and decoration hooks are required.");
+            var itemsTimer=System.Diagnostics.Stopwatch.StartNew();
             RegisterBoards(ItemsInfoDatabase.GetOrLoad());
+            Logger.LogInfo("Startup database and shop-item setup: "+itemsTimer.ElapsedMilliseconds+" ms.");
             _paperBeer = new PaperBeerPriceFix(_folder, text => Logger.LogInfo(text), WriteStatus);
             SceneManager.sceneLoaded += SceneLoaded; SceneManager.sceneUnloaded += SceneUnloaded;
             _ready = true; RequestDiscovery();
@@ -120,7 +124,17 @@ public sealed class Plugin : BaseUnityPlugin
         {
             if (_catalogError != ex.Message) { _catalogError = ex.Message; Logger.LogError("Live board registration waiting: " + ex); }
         }
-        try { _certificates?.Register(database); if(_certificates?.Ready==true)_certificateError=""; }
+        bool certificatesWereReady=_certificates?.Ready==true;
+        var certificateTimer=System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            _certificates?.Register(database);
+            if(_certificates?.Ready==true)
+            {
+                _certificateError="";
+                if(!certificatesWereReady)Logger.LogInfo("Startup prepared framed-art registration: "+certificateTimer.ElapsedMilliseconds+" ms.");
+            }
+        }
         catch (Exception ex)
         {
             if (_certificateError != ex.Message) { _certificateError = ex.Message; Logger.LogWarning("Certificate registration waiting: " + ex.Message); }

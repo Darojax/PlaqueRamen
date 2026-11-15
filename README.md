@@ -9,7 +9,7 @@ Live menu boards, framed certificates and old photographs for **Ramen Shop Simul
 3. Download the mod ZIP from [Releases](https://github.com/Darojax/PlaqueRamen/releases/latest) and extract it into the game folder, merging the `BepInEx` folders.
 4. Launch the game and load your save. The mod's name and version appear briefly at the bottom left.
 
-When updating, replace the existing mod files. If you used the old `MenuPlaqueSync` prototype, remove its folder from `BepInEx/plugins` first.
+When updating, replace the existing `BepInEx/plugins/PlaqueRamen` folder. If you used the old `MenuPlaqueSync` prototype, remove its folder from `BepInEx/plugins` first.
 
 ## Using the mod
 
@@ -48,4 +48,4 @@ cd PlaqueRamen
 .\scripts\Build.ps1 -GameRoot 'D:\SteamLibrary\steamapps\common\Ramen Shop Simulator'
 ```
 
-The script downloads and verifies the pinned BepInEx build dependencies, builds the mod, runs its checks and creates `dist/PlaqueRamen-0.3.7.zip`. Install that ZIP using the steps above. Game libraries are read from your installation and are not included.
+The script downloads and verifies the pinned BepInEx build dependencies, prepares the framed artwork, builds the mod, runs its checks and creates `dist/PlaqueRamen-0.3.8.zip`. Install that ZIP using the steps above. Game libraries are read from your installation and are not included.
